@@ -1,0 +1,21 @@
+{
+  "app_id":"pruebajuanma1",
+  "dev_id":"pysense",
+  "hardware_serial":"70B3D5499DAEC6EA",
+  "port":2,"counter":5,
+  "payload_raw":"eyJkIjp7ImlkIjoiRkZGRiIsImxpZ2h0Ijo0OCwicHJlc3N1cmUiOjE0LjUwMDAwMCwiaHVtaWRpdHkiOjI2OTMuNjY0MDczfX0=",
+  "metadata":{
+                "time":"2017-06-20T16:49:14.034301471Z",
+                "frequency":868.1,
+                "modulation":"LORA",
+                "data_rate":"SF7BW125",
+                "coding_rate":"4/5",
+                "gateways":[{
+                              "gtw_id":"eui-240ac4fffe008090",
+                              "timestamp":133346324,
+                              "time":"",
+                              "channel":0,
+                              "rssi":-34,
+                              "snr":29}]
+            }
+}
