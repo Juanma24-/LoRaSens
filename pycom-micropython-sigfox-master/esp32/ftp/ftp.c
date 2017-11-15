@@ -63,7 +63,7 @@
 #define FTP_UNIX_TIME_20150101              1420070400ll
 #define FTP_UNIX_SECONDS_180_DAYS           15552000ll
 #define FTP_DATA_TIMEOUT_MS                 10000            // 10 seconds
-#define FTP_SOCKETFIFO_ELEMENTS_MAX         7
+#define FTP_SOCKETFIFO_ELEMENTS_MAX         5
 #define FTP_CYCLE_TIME_MS                   (SERVERS_CYCLE_TIME_MS * 2)
 
 /******************************************************************************
@@ -219,15 +219,16 @@ static void ftp_open_child (char *pwd, char *dir);
 static void ftp_close_child (char *pwd);
 static void ftp_return_to_previous_path (char *pwd, char *dir);
 
+
 /******************************************************************************
  DEFINE PUBLIC FUNCTIONS
  ******************************************************************************/
 void ftp_init (void) {
-    // Allocate memory for the data buffer, and the file system structs (from the RTOS heap)
-    ftp_data.dBuffer = pvPortMalloc(FTP_BUFFER_SIZE);
-    ftp_path = pvPortMalloc(FTP_MAX_PARAM_SIZE);
-    ftp_scratch_buffer = pvPortMalloc(FTP_MAX_PARAM_SIZE);
-    ftp_cmd_buffer = pvPortMalloc(FTP_MAX_PARAM_SIZE + FTP_CMD_SIZE_MAX);
+    // allocate memory for the data buffer, and the file system structs (from the RTOS heap)
+    ftp_data.dBuffer = heap_caps_malloc(FTP_BUFFER_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    ftp_path = heap_caps_malloc(FTP_MAX_PARAM_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    ftp_scratch_buffer = heap_caps_malloc(FTP_MAX_PARAM_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    ftp_cmd_buffer = heap_caps_malloc(FTP_MAX_PARAM_SIZE + FTP_CMD_SIZE_MAX, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     SOCKETFIFO_Init (&ftp_socketfifo, (void *)ftp_fifoelements, FTP_SOCKETFIFO_ELEMENTS_MAX);
     ftp_data.c_sd  = -1;
     ftp_data.d_sd  = -1;
@@ -335,8 +336,7 @@ void ftp_run (void) {
                         ftp_send_reply(426, NULL);
                         ftp_data.state = E_FTP_STE_END_TRANSFER;
                     }
-                }
-                else {
+                } else {
                     if (ftp_data.special_file) {
                         ftp_data.special_file = false;
                         updater_finish();

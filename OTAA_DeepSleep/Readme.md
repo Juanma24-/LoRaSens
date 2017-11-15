@@ -9,7 +9,7 @@ instrucciones necesarias para configurar el dispositivo Lopy, para realizar la
 conexión con éxito primero con el Network Server TTN y posteriormente con el
 cloud vía MQTT.
 
-__IMPORTANTE__
+__IMPORTANTE__  
 Para conservar la batería del dispositivo el máximo tiempo posible se hace uso
 de la función deepsleep. En Lopy + Pysense se puede entrar en deepsleep de dos
 formas: mediante la función de Lopy o mediante la función de Pysense. Se ha

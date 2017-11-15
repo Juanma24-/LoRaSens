@@ -15,14 +15,15 @@ from pysense import Pysense
 from SI7006A20 import SI7006A20
 from LTR329ALS01 import LTR329ALS01
 from MPL3115A2 import MPL3115A2,ALTITUDE,PRESSURE
+WAKE_REASON_TIMER = 4
 #------------------------------------------------------------------------------#
 class Node:
-    def __init__(self,sleep_time):
+    def __init__(self,sleep_time,pysense):
         self.lora = None                                                        # Instancia de Lora (sin inicializar)
         self.s = None                                                           # Instancia Socket (sin inicializar)
         self.sleep_time = sleep_time                                            # Intervalo de inactividad
         self.dr = 5                                                             # Data Rate (defecto 5)
-        self.py = Pysense()                                                     # Instancia de Pysense
+        self.py = pysense                                                       # Instancia de Pysense
         self.mp = MPL3115A2(self.py,mode=PRESSURE)                              # Instancia Sensor de Presión
         self.si = SI7006A20(self.py)                                            # Instancia Sensor de Humedad y tempertura
         self.lt = LTR329ALS01(self.py)                                          # Instancia Sensor de Luminosidad
@@ -60,10 +61,16 @@ class Node:
         # Initialize LoRa in LORAWAN mode
         self.lora = LoRa(mode = LoRa.LORAWAN)
         # restore the LoRaWAN connection state
-        self.lora.nvram_restore()
+        try:
+            self.lora.nvram_restore()
+        except:
+            print("Error: LoRa Configuration cuold not be restored")
+            self.connect(binascii.unhexlify('70B3D57EF00042A4'),binascii.unhexlify('3693926E05B301A502ABCFCA430DA52A'))
+
+        print("LoRa Connection Parameters Recovered")
         # Create a LoRa socket
-        print("Create LoRaWAN socket")
         self.s = socket.socket(socket.AF_LORA, socket.SOCK_RAW)
+        print("Created LoRaWAN socket")
         for i in range(3, 16):
             self.lora.remove_channel(i)
         # Set the 3 default channels to the same frequency
@@ -92,7 +99,7 @@ class Node:
 #Función de recepción de datos.Es activada tras la ventana de recepción
 #posterior al envío.
     def receive(self,rx=None):
-        if len(rx) == 0:                                                            #No hay mensaje de recepción
+        if len(rx) == 0:                                                        #No hay mensaje de recepción
             pass
         else:
             if rx[0] == 73:                                                     #Orden de Cambio de intervalo (ASCII hex I=0x49 dec 73)
@@ -121,24 +128,45 @@ class Node:
 app_eui = binascii.unhexlify('70B3D57EF00042A4')                                #ID de la app. (Seleccionada por el usuario)
 app_key = binascii.unhexlify('3693926E05B301A502ABCFCA430DA52A')                #Clave de la app para realizar el handshake. Única para cada dispositivo.
 ajuste = 6                                                                      #Numero de segundos para que el intervalo sea exacto en el Network Server
+py = Pysense()
 #Según el modo de inicio, se realizan unas serie de acciones u otras.
-if machine.reset_cause() == machine.DEEPSLEEP_RESET:                            #Si despierta tras deepsleep
-    print('woke from a deep sleep')
-    sleep_time = pycom.nvs_get('sleep_time')                                    #Obtiene el valor de la variable sleep_time guardado en NVRAM
-    n = Node(sleep_time)                                                        #Crea una instancia de Node
+if py.get_wake_reason() == WAKE_REASON_TIMER:                                   #Si despierta tras deepsleep
+    print('Woke from a deep sleep')
+
+    try:
+        sleep_time = pycom.nvs_get('sleep_time')                                #Obtiene el valor de la variable sleep_time guardado en NVRAM
+    except 0:                                                                   #No se consigue obtener el valor (ERROR INFO: https://forum.pycom.io/topic/1869/efficiency-of-flash-vs-nvram-and-some-nvs-questions/3)
+        print("Error: Sleep Time could not be recovered. Setting default value")
+        sleep_time = 300                                                        #Se le da el valor por defecto (Minimo segun Fair Acess Policy TTN)
+        pycom.nvs_set('sleep_time', sleep_time)                                 #Guarda el valor por defecto de sleep_time en NVRAM
+    print("SleepTime recovered")
+
+    try:
+        n = Node(sleep_time,py)                                                 #Crea una instancia de Node
+        print("Node Instance created sucesfully")
+    except Exception:
+        print("Node Instance could not be cretaed. Sleeping...")
+        print('- ' * 20)
+        machine.deepsleep((sleep_time-ajuste)*1000)                             #Dispositivo enviado a Deepsleep
+
     lecturas = n.readsens()
-    print("Enviando lecturas")
+    print("Sending Data")
     n.send(lecturas)                                                            #Envío de las lecturas
-    print("Lecturas Enviadas")
-    machine.deepsleep((sleep_time-ajuste)*1000)                                #Dispositivo enviado a Deepsleep
-    #n.py.setup_sleep(sleep_time-ajuste)
-    #n.py.go_to_sleep()
+    print("Data Sent, sleeping ...")
+    print('- ' * 20)
+
+    n.py.setup_sleep(sleep_time-ajuste)
+    n.py.go_to_sleep()                                                          #Dispositivo enviado a Deepsleep
 else:                                                                           #Si viene de Boot o Hard Reset
-    print('power on or hard reset')
-    sleep_time = 30                                                             #Valor por defecto de sleep_time
-    pycom.nvs_set('sleep_time', 30)                                             #Guarda el valor por defecto de sleep_time en NVRAM
-    n = Node(sleep_time)                                                        #Crea una instancia de Node
+    print('Power on or hard reset')
+    sleep_time = 300                                                            #Valor por defecto de sleep_time (Minimo segun Fair Acess Policy TTN)
+    try:
+        pycom.nvs_set('sleep_time', sleep_time)                                 #Guarda el valor por defecto de sleep_time en NVRAM
+    except (None):
+        print("Error: Sleep Time Value could not be stored")
+    n = Node(sleep_time,py)                                                     #Crea una instancia de Node
     n.connect(app_eui, app_key)                                                 #Join LoRaWAN with OTAA
-    machine.deepsleep((sleep_time-ajuste)*1000)                                #Dispositivo enviado a Deepsleep
-    #n.py.setup_sleep(sleep_time-ajuste)
-    #n.py.go_to_sleep()
+    print("sleeping...")
+    print('- ' * 20)
+    n.py.setup_sleep(sleep_time-ajuste)                                         #Dispositivo enviado a Deepsleep
+    n.py.go_to_sleep()

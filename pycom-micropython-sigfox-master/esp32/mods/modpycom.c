@@ -110,8 +110,8 @@ STATIC mp_obj_t mod_pycom_pulses_get (mp_obj_t gpio, mp_obj_t timeout) {
     RingbufHandle_t rb = NULL;
     mp_obj_t pulses_l = mp_obj_new_list(0, NULL);
 
-    //get RMT RX ringbuffer
-    rmt_get_ringbuf_handler(RMT_CHANNEL_0, &rb);
+    // get the RMT RX ringbuffer
+    rmt_get_ringbuf_handle(RMT_CHANNEL_0, &rb);
     rmt_rx_start(RMT_CHANNEL_0, 1);
 
     size_t rx_size = 0;

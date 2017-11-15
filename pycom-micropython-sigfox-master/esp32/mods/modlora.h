@@ -19,7 +19,7 @@
 #define LORA_PAYLOAD_SIZE_MAX                                   (255)
 #define LORA_CMD_QUEUE_SIZE_MAX                                 (2)
 #define LORA_DATA_QUEUE_SIZE_MAX                                (3)
-#define LORA_STACK_SIZE                                         (3072)
+#define LORA_STACK_SIZE                                         (2560)
 #define LORA_TASK_PRIORITY                                      (6)
 
 #define LORA_STATUS_COMPLETED                                   (0x01)
@@ -48,7 +48,7 @@ typedef enum {
     E_LORA_NVS_ELE_APPSKEY,
     E_LORA_NVS_ELE_NET_ID,
     E_LORA_NVS_ELE_ADR_ACKS,
-    E_LORA_NVS_ELE_CHANNEL_MASK,
+    E_LORA_NVS_ELE_MAC_PARAMS,
     E_LORA_NVS_ELE_CHANNELS, 
     E_LORA_NVS_NUM_KEYS 
 } e_lora_nvs_key_t;

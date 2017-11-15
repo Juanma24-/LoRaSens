@@ -1,4 +1,4 @@
-import AWSIoTPythonSDK.MQTTConst as mqttConst
+import MQTTConst as mqttConst
 from machine import Timer
 import json
 import os

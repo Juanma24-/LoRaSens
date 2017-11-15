@@ -1,5 +1,5 @@
-import AWSIoTPythonSDK.MQTTConst as mqttConst
-import AWSIoTPythonSDK.MQTTMsgHandler as msgHandler
+import MQTTConst as mqttConst
+import MQTTMsgHandler as msgHandler
 import time
 import struct
 import _thread
@@ -40,7 +40,7 @@ class MQTTClient:
         self._baseReconnectTimeSecond=1
         self._maximumReconnectTimeSecond=32
         self._minimumConnectTimeSecond=20
-        self._msgHandler=msgHandler.MsgHandler(self._recv_callback)
+        self._msgHandler=msgHandler.MsgHandler(self._recv_callback, self.connect)
 
     def getClientID(self):
         return self.client_id

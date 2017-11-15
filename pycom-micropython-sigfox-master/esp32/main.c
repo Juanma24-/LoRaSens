@@ -44,15 +44,27 @@
 #include "esp_log.h"
 
 #include "py/mpstate.h"
+#include "py/mpconfig.h"
 #include "py/runtime.h"
 #include "mptask.h"
 #include "machpin.h"
 #include "pins.h"
 
+
+TaskHandle_t mpTaskHandle;
+TaskHandle_t svTaskHandle;
+#if defined(LOPY)
+TaskHandle_t xLoRaTaskHndl;
+#elif defined(SIPY)
+TaskHandle_t xSigfoxTaskHndl;
+#endif
+
+extern void machine_init0(void);
+
 /******************************************************************************
  DECLARE PUBLIC DATA
  ******************************************************************************/
-StackType_t mpTaskStack[MICROPY_TASK_STACK_LEN] __attribute__((aligned (8)));
+StackType_t *mpTaskStack;
 
 // board configuration options from mpconfigboard.h
 uint32_t micropy_hw_flash_size;
@@ -87,6 +99,10 @@ static StaticTask_t mpTaskTCB;
 void app_main(void) {
     // remove all the logs from the IDF
     esp_log_level_set("*", ESP_LOG_NONE);
+
+    // this one gets the remaining sleep time
+    machine_init0();
+
     // initalize the non-volatile flash space
     nvs_flash_init();
 
@@ -104,6 +120,9 @@ void app_main(void) {
         micropy_lpwan_dio_pin_index = 2;
         micropy_lpwan_dio_pin_num = 23;
         micropy_lpwan_dio_pin = &pin_GPIO23;
+
+        mpTaskStack = heap_caps_malloc(MICROPY_TASK_STACK_SIZE_PSRAM, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+
     } else {
         micropy_hw_antenna_diversity = true;
         micropy_hw_antenna_diversity_pin_num = 16;
@@ -120,11 +139,14 @@ void app_main(void) {
         micropy_lpwan_dio_pin_index = 2;
         micropy_lpwan_dio_pin_num = 23;
         micropy_lpwan_dio_pin = &pin_GPIO23;
+
+        mpTaskStack = heap_caps_malloc(MICROPY_TASK_STACK_SIZE, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     }
 
     micropy_hw_flash_size = spi_flash_get_chip_size();
 
     // create the MicroPython task
-    xTaskCreateStaticPinnedToCore(TASK_Micropython, "MicroPy", MICROPY_TASK_STACK_LEN, NULL,
+    mpTaskHandle = 
+    (TaskHandle_t)xTaskCreateStaticPinnedToCore(TASK_Micropython, "MicroPy", MICROPY_TASK_STACK_LEN, NULL,
                                   MICROPY_TASK_PRIORITY, mpTaskStack, &mpTaskTCB, 0);
 }

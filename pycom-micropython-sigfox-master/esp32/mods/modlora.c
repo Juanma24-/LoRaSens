@@ -54,7 +54,7 @@
 #define RF_FREQUENCY_CENTER                         868000000   // Hz
 #define RF_FREQUENCY_MAX                            870000000   // Hz
 #define TX_OUTPUT_POWER_MAX                         20          // dBm
-#define TX_OUTPUT_POWER_DEAFULT                     13          // dBm
+#define TX_OUTPUT_POWER_DEAFULT                     14          // dBm
 #define TX_OUTPUT_POWER_MIN                         2           // dBm
 #define LORAWAN_MAX_JOIN_DATARATE                   5
 #elif defined(USE_BAND_915) || defined(USE_BAND_915_HYBRID)
@@ -230,7 +230,6 @@ typedef struct {
     bool              public;
     bool              joined;
     uint8_t           events;
-    uint8_t           h_events;
     uint8_t           trigger;
     uint8_t           tx_trials;
 } lora_obj_t;
@@ -261,7 +260,7 @@ static lora_rx_data_t rx_data_isr;
 static TimerEvent_t TxNextActReqTimer;
 
 static nvs_handle modlora_nvs_handle;
-static const char *modlora_nvs_data_key[E_LORA_NVS_NUM_KEYS] = { "JOINED", "UPLNK", "DWLNK", "DEVADDR", "NWSKEY", "APPSKEY", "NETID", "ADRACK", "CHNLMASK", "CHANNELS"};
+static const char *modlora_nvs_data_key[E_LORA_NVS_NUM_KEYS] = { "JOINED", "UPLNK", "DWLNK", "DEVADDR", "NWSKEY", "APPSKEY", "NETID", "ADRACK", "MACPARAMS", "CHANNELS"};
 
 /******************************************************************************
  DECLARE PRIVATE FUNCTIONS
@@ -299,6 +298,8 @@ static int lora_socket_bind (mod_network_socket_obj_t *s, byte *ip, mp_uint_t po
 static int lora_socket_setsockopt (mod_network_socket_obj_t *s, mp_uint_t level, mp_uint_t opt, const void *optval, mp_uint_t optlen, int *_errno);
 static int lora_socket_ioctl (mod_network_socket_obj_t *s, mp_uint_t request, mp_uint_t arg, int *_errno);
 
+extern TaskHandle_t xLoRaTaskHndl;
+
 /******************************************************************************
  DEFINE PUBLIC FUNCTIONS
  ******************************************************************************/
@@ -310,8 +311,7 @@ void modlora_init0(void) {
     if (!lorawan_nvs_open()) {
         printf("Error opening LoRa NVS namespace!\n");
     }
-
-    xTaskCreatePinnedToCore(TASK_LoRa, "LoRa", LORA_STACK_SIZE / sizeof(StackType_t), NULL, LORA_TASK_PRIORITY, NULL, 0);
+    xTaskCreatePinnedToCore(TASK_LoRa, "LoRa", LORA_STACK_SIZE / sizeof(StackType_t), NULL, LORA_TASK_PRIORITY, &xLoRaTaskHndl, 0);
 }
 
 bool modlora_nvs_set_uint(uint32_t key_idx, uint32_t value) {
@@ -425,9 +425,10 @@ static void McpsConfirm (McpsConfirm_t *McpsConfirm) {
             case MCPS_UNCONFIRMED: {
                 // Check Datarate
                 // Check TxPower
-                uint32_t ilevel = MICROPY_BEGIN_ATOMIC_SECTION();
-                lora_obj.h_events |= MODLORA_TX_EVENT;
-                MICROPY_END_ATOMIC_SECTION(ilevel);
+                lora_obj.events |= MODLORA_TX_EVENT;
+                if (lora_obj.trigger & MODLORA_TX_EVENT) {
+                    mp_irq_queue_interrupt(lora_callback_handler, (void *)&lora_obj);
+                }
                 lora_obj.state = E_LORA_STATE_IDLE;
                 xEventGroupSetBits(LoRaEvents, status);
                 break;
@@ -440,9 +441,10 @@ static void McpsConfirm (McpsConfirm_t *McpsConfirm) {
                 lora_obj.sftx = McpsConfirm->Datarate;
                 lora_obj.tx_trials = McpsConfirm->NbRetries;
                 if (McpsConfirm->AckReceived) {
-                    uint32_t ilevel = MICROPY_BEGIN_ATOMIC_SECTION();
-                    lora_obj.h_events |= MODLORA_TX_EVENT;
-                    MICROPY_END_ATOMIC_SECTION(ilevel);
+                    lora_obj.events |= MODLORA_TX_EVENT;
+                    if (lora_obj.trigger & MODLORA_TX_EVENT) {
+                        mp_irq_queue_interrupt(lora_callback_handler, (void *)&lora_obj);
+                    }
                     lora_obj.state = E_LORA_STATE_IDLE;
                     xEventGroupSetBits(LoRaEvents, status);
                 } else {
@@ -455,10 +457,10 @@ static void McpsConfirm (McpsConfirm_t *McpsConfirm) {
                 break;
         }
     } else {
-        lora_obj.tx_trials = McpsConfirm->NbRetries;
-        uint32_t ilevel = MICROPY_BEGIN_ATOMIC_SECTION();
-        lora_obj.h_events |= MODLORA_TX_FAILED_EVENT;
-        MICROPY_END_ATOMIC_SECTION(ilevel);
+        lora_obj.events |= MODLORA_TX_FAILED_EVENT;
+        if (lora_obj.trigger & MODLORA_TX_FAILED_EVENT) {
+            mp_irq_queue_interrupt(lora_callback_handler, (void *)&lora_obj);
+        }
         lora_obj.state = E_LORA_STATE_IDLE;
         status |= LORA_STATUS_ERROR;
         xEventGroupSetBits(LoRaEvents, status);
@@ -511,9 +513,10 @@ static void McpsIndication (McpsIndication_t *mcpsIndication) {
                 rx_data_isr.len = mcpsIndication->BufferSize;
                 rx_data_isr.port = mcpsIndication->Port;
                 xQueueSend(xRxQueue, (void *)&rx_data_isr, 0);
-                uint32_t ilevel = MICROPY_BEGIN_ATOMIC_SECTION();
-                lora_obj.h_events |= MODLORA_RX_EVENT;
-                MICROPY_END_ATOMIC_SECTION(ilevel);
+                lora_obj.events |= MODLORA_RX_EVENT;
+                if (lora_obj.trigger & MODLORA_RX_EVENT) {
+                    mp_irq_queue_interrupt(lora_callback_handler, (void *)&lora_obj);
+                }
             }
             // printf("Data on port 1 or 2 received\n");
         } else if (mcpsIndication->Port == 224) {
@@ -728,13 +731,6 @@ static void TASK_LoRa (void *pvParameters) {
                             result &= modlora_nvs_get_uint(E_LORA_NVS_ELE_DWLINK, &downlinks);
                             result &= modlora_nvs_get_uint(E_LORA_NVS_ELE_ADR_ACKS, &adrAcks);
 
-                            uint16_t ChannelsMask[6];
-                            length = 6 * sizeof(uint16_t);
-                            result &= modlora_nvs_get_blob(E_LORA_NVS_ELE_CHANNEL_MASK, (void *)ChannelsMask, &length);
-
-                            length = LORA_MAX_NB_CHANNELS * sizeof(ChannelParams_t);
-                            uint8_t channels[LORA_MAX_NB_CHANNELS * sizeof(ChannelParams_t)];
-                            result &= modlora_nvs_get_blob(E_LORA_NVS_ELE_CHANNELS, (void *)channels, &length);
                             if (result) {
                                 mibReq.Type = MIB_UPLINK_COUNTER;
                                 mibReq.Param.UpLinkCounter = uplinks;
@@ -743,18 +739,18 @@ static void TASK_LoRa (void *pvParameters) {
                                 mibReq.Type = MIB_DOWNLINK_COUNTER;
                                 mibReq.Param.DownLinkCounter = downlinks;
                                 LoRaMacMibSetRequestConfirm( &mibReq );
-                                
+
                                 mibReq.Type = MIB_ADR_ACK_COUNTER;
                                 mibReq.Param.AdrAckCounter = adrAcks;
                                 LoRaMacMibSetRequestConfirm( &mibReq );
-                                
-                                mibReq.Type = MIB_CHANNELS_MASK;
-                                mibReq.Param.ChannelsMask = ChannelsMask;
-                                LoRaMacMibSetRequestConfirm( &mibReq );
 
-                                mibReq.Type = MIB_CHANNELS;
-                                memcpy(mibReq.Param.ChannelList, channels, sizeof(channels));
-                                LoRaMacMibGetRequestConfirm( &mibReq );
+                                // write the MAC params directly from the NVRAM
+                                length = sizeof(LoRaMacParams_t);
+                                modlora_nvs_get_blob(E_LORA_NVS_ELE_MAC_PARAMS, (void *)LoRaMacGetMacParams(), &length);
+
+                                // write the channel list directly from the NVRAM
+                                length = LORA_MAX_NB_CHANNELS * sizeof(ChannelParams_t);
+                                modlora_nvs_get_blob(E_LORA_NVS_ELE_CHANNELS, (void *)LoRaMacGetChannelList(), &length);
 
                                 lora_obj.activation = E_LORA_ACTIVATION_ABP;
                                 lora_obj.state = E_LORA_STATE_JOIN;
@@ -945,17 +941,6 @@ static void TASK_LoRa (void *pvParameters) {
         }
 
         TimerLowPowerHandler();
-
-        uint32_t ilevel = MICROPY_BEGIN_ATOMIC_SECTION();
-        // queue an interrupt if we have events on hold
-        if (lora_obj.h_events) {
-            lora_obj.events = lora_obj.h_events;
-            lora_obj.h_events = 0;
-            if (lora_obj.trigger & lora_obj.events) {
-                mp_irq_queue_interrupt(lora_callback_handler, (void *)&lora_obj);
-            }
-        }
-        MICROPY_END_ATOMIC_SECTION(ilevel);
     }
 }
 
