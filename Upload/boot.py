@@ -4,14 +4,19 @@ import machine
 import ubinascii
 import network
 from network import Bluetooth
-uart = UART(0, 115200)
-os.dupterm(uart)
+#-----------------------#
+#UART no activa
+#uart = UART(0, 115200)
+#os.dupterm(uart)
+#-----------------------#
 #Desactiva WiFi
 wlan = network.WLAN(mode=network.WLAN.STA)
 wlan.deinit()
+#-----------------------#
 #Desactiva Bluetooth
 bt = Bluetooth()
 bt.deinit()
+#-----------------------#
 #Imprime version del Firmware OS
 print('Version OS:' + os.uname().release)
 

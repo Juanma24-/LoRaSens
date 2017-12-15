@@ -85,8 +85,8 @@ gateway y no sobrepasar las limitaciones que imponen algunos Network Servers, se
  hace necesario reducir el tamaño de los mensajes al máximo.  
 ### Envío
 El envío se realiza mediante el método _send_ de un socket previamente creado.
-El envío de datos está programado para enviar un tuple que contiene unicamente
-los valores de los sensores en un orden especifico. Este tuple es la minima
+El envío de datos está programado para enviar un array de bytes que contiene unicamente
+los valores de los sensores en un orden especifico. Este array es la minima
 cantidad de información que se puede enviar, conteniendo el payload del mensaje
 LoRaWAN solo la información necesaria.
 ### Recepción
