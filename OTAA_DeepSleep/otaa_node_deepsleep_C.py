@@ -5,7 +5,6 @@
 from network import LoRa
 import socket
 import binascii
-#import struct
 import pycom
 import time
 import machine
@@ -26,7 +25,7 @@ class Node:
         self.dr = data_rate                                                     # Data Rate (defecto 5)
         self.py = pysense                                                       # Instancia de Pysense
         self.mp = MPL3115A2(self.py,mode=PRESSURE)                              # Instancia Sensor de Presión
-        self.si = SI7006A20(self.py)                                            # Instancia Sensor de Humedad y tempertura
+        self.si = SI7006A20(self.py)                                            # Instancia Sensor de Humedad y Temperatura
         self.lt = LTR329ALS01(self.py)                                          # Instancia Sensor de Luminosidad
 #------------------------------------------------------------------------------#
     def connect(self,app_eui, app_key):
@@ -43,7 +42,7 @@ class Node:
         self.lora.add_channel(2, frequency=868100000, dr_min=0, dr_max=5)
         # Join a network using OTAA (Over the Air Activation)
         self.lora.join(activation = LoRa.OTAA, auth = (app_eui, app_key),
-                    timeout = 0)                                                #login for TheThingsNetwork see here:
+                    timeout = 0, dr=5)                                                #login for TheThingsNetwork see here:
                                                                                 #https://www.thethingsnetwork.org/forum/t/lopy-otaa-example/4471
         # Wait until the module has joined the network
         while not self.lora.has_joined():
@@ -129,7 +128,7 @@ class Node:
 pycom.heartbeat(False)
 app_eui = binascii.unhexlify('70B3D57EF00042A4')                                #ID de la app. (Seleccionada por el usuario)
 app_key = binascii.unhexlify('3693926E05B301A502ABCFCA430DA52A')                #Clave de la app para realizar el handshake. Única para cada dispositivo.
-ajuste = 10                                                                      #Numero de segundos para que el intervalo sea exacto en el Network Server
+ajuste = 10                                                                     #Numero de segundos para que el intervalo sea exacto en el Network Server
 py = Pysense()
 #Según el modo de inicio, se realizan unas serie de acciones u otras.
 if py.get_wake_reason() == WAKE_REASON_TIMER:                                   #Si despierta tras deepsleep

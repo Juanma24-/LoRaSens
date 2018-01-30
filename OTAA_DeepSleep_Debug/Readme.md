@@ -211,3 +211,8 @@ git submodule update --init
 cd pycom-micropython-sigfox/mpy-cross
 make all
 ~~~
+
+DOWNGRADING (SOL. BRICK)
+------------------------------------
+Es necesario seguir el siguiente hilo del foro: [hilo](https://forum.pycom.io/topic/517/downgrading-firmware-advanced-users).  
+La conexión serie se realiza de manera más sencilla bajo el sistema operativo Windows. Además, si se tienen problemas para realizar la conexión con el dispositivo, se puede usar putty para llamarlo mediante `COM# baudrate=115200` y hacer posteriormente un reset.

@@ -11,5 +11,5 @@ print('Version OS:' + os.uname().release)
 #print('Lopy´s WIFI MAC Adress' + machine.unique_id())
 #------------------------------------------------------------------------------#
 #Archivo Main para publicación de datos.
-machine.main('otaa_node_acc.py')
+machine.main('otaa_node_acc_deepsleep.py')
 #------------------------------------------------------------------------------#

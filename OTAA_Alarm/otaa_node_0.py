@@ -44,9 +44,9 @@ def lora_cb(lora):
         print('Lora packet received')
         data = s.recv(128)                                                      #Obtiene los datos recibidos y los pasa a formato bytes para poder ser tratados
         print(data[1])
-# Supongo que los datos recibidos vienen en formato bytes
-# (han podido ser convertidos de forma correcta)
-#### ACTIVAR/DESACTIVAR SENSORES
+        # Supongo que los datos recibidos vienen en formato bytes
+        # (han podido ser convertidos de forma correcta)
+        #### ACTIVAR/DESACTIVAR SENSORES
         if data[0] == 65:                                                       #Si recibe el comando ACTIVAR (ASCII hex A=0x41)
             for i in range(0,6):                                                #Evalúa cada uno de los sensores en el siguiente orden (G,A,T,H,P,L)
                 en = data[1] & (1<<i)                                           #Extrae el bit correspondiente a cada sensor en cada caso
@@ -62,7 +62,7 @@ def lora_cb(lora):
                     gestion.activarSensor(sensor='P',en=en)
                 elif i == 5:                                                    #Sensor de Luminosidad (L)
                     gestion.activarSensor(sensor='L',en=en)
-#### MODIFICAR INTERVALOS
+                    #### MODIFICAR INTERVALOS
         elif data[0] == 73:                                                     #Si recibe el comando INTERVALO (ASCII hex I=0x49)
             if data[1] == 76:                                                   #LUMINOSIDAD (el segundo byte es L = 0x4C)
                 print("Cambiando Intervalo Sensor de Luminosidad")
@@ -87,8 +87,8 @@ def lora_cb(lora):
             else:
                 print("Sensor no reconocido")
                 return
-# Cancela la alarma de publicacion actual, calcula el nuevo intervalo minimo y
-# vuelve a activar la alarma.
+                # Cancela la alarma de publicacion actual, calcula el nuevo intervalo minimo y
+                # vuelve a activar la alarma.
             global alarmaPub
             alarmaPub.cancel()
             intervalopub = gestion.intervaloMinimo()
