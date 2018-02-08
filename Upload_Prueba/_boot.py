@@ -23,8 +23,8 @@ os.dupterm(uart)
 #Imprime version del Firmware OS
 print('Version OS:' + os.uname().release)
 print("Machine CPU frequency: %dMHz" %(machine.freq()/1000000))
-print("Machine ID:" + ubinascii.hexlify(machine.unique_id()))
+#print("Machine ID:" + ubinascii.hexlify(machine.unique_id()))
 #------------------------------------------------------------------------------#
 #Archivo Main para publicación de datos con activación OTAA.
-machine.main('otaa_node_deepsleep.py')
+#machine.main('prueba.py')
 #------------------------------------------------------------------------------#

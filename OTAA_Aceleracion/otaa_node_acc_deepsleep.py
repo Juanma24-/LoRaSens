@@ -21,7 +21,7 @@ WAKE_REASON_PUSH_BUTTON = 2
 WAKE_REASON_ACCELEROMETER = 1
 
 FULL_SCALE_4G = const(2)
-ODR_50_HZ = const(2)
+ODR_800_HZ = const(6)
 #------------------------------------------------------------------------------#
 class Node:
     def __init__(self,data_rate,py):
@@ -67,6 +67,9 @@ class Node:
         """
         Send data over the network.
         """
+
+        self.s_lock.acquire()                                                   # Espera a que el semáforo esté disponible (tiempo indefinido)
+
         if py.get_wake_reason() == WAKE_REASON_ACCELEROMETER:                           #Si despierta tras deepsleep
             # Initialize LoRa in LORAWAN mode
             self.lora = LoRa(mode = LoRa.LORAWAN,adr=True,device_class=LoRa.CLASS_A)
@@ -102,6 +105,10 @@ class Node:
             if e.errno == 11:
                 print("Caught exception while sending")
                 print("errno: ", e.errno)
+
+        self.s_lock.release()                                                   #Libera el semáforo
+        _thread.exit()                                                          #Cierra el hilo
+
 #------------------------------------------------------------------------------#
 #Función de recpeción de datos.Es activada tras la ventana de recepción
 #posterior al envío.
@@ -122,24 +129,33 @@ class Node:
         self.raw = self.acc.acceleration()                                      # Devuelve tuple con aceleracion en tres ejes (G)
         print("Aceleracion-> X:%fG Y:%fG Z:%fG"%(self.raw[0],self.raw[1],self.raw[2]))
         #Cálculos
-        if (self.raw[0] > 2.1) or (self.raw[1] > 2.1) or (self.raw[2] > 2.1):
-                print("Enviando datos")
-                XR=int((self.raw[0]-1)*1000).to_bytes(2,'little')
-                YR=int((self.raw[1]-1)*1000).to_bytes(2,'little')
-                ZR=int((self.raw[2]-1)*1000).to_bytes(2,'little')
-                XL=int((self.last[0]-1)*1000).to_bytes(2,'little')
-                YL=int((self.last[1]-1)*1000).to_bytes(2,'little')
-                ZL=int((self.last[2]-1)*1000).to_bytes(2,'little')
-                data = XR+YR+ZR+XL+YL+ZL
-                _thread.start_new_thread(self.send,data)                        # Se crea un hilo para el envío de valores
+        #if (self.raw[0] > 2.1) or (self.raw[1] > 2.1) or (self.raw[2] > 2.1):
+        #        print("Enviando datos")
+        #        XR=int(self.raw[0]*10000).to_bytes(2,'little')
+        #        YR=int(self.raw[1]*10000).to_bytes(2,'little')
+        #        ZR=int(self.raw[2]*10000).to_bytes(2,'little')
+        #        XL=int(self.last[0]*10000).to_bytes(2,'little')
+        #        YL=int(self.last[1]*10000).to_bytes(2,'little')
+        #        ZL=int(self.last[2]*10000).to_bytes(2,'little')
+        #        data = XR+YR+ZR+XL+YL+ZL
+        #        _thread.start_new_thread(self.send,data)                        # Se crea un hilo para el envío de valores
         self._compare_update()
+        alarmaPub = Timer.Alarm(self.readsens(),10, periodic=False)
+        #if (self.raw[0] < 1.5) and (self.raw[1] < 1.5) and (self.raw[2] < 1.5):
+        #    alarmaPub.cancel();
+        #    n.py.setup_int_wake_up(rising=True,falling=False)                   #Activa la interrupcion para el boton DEBUG
+        #    print('Activada Interrupccion de Actividad')
+        #    n.acc.enable_activity_interrupt(1500,100)                           #Threshold= 1,5G, Min Time = 100ms
+        #    print("Going to Sleep")
+        #    n.py.setup_sleep(300)
+        #    n.py.go_to_sleep()
 
         #self.battery = round(self.py.read_battery_voltage(),2)
         #print("Battery: %f",%(self.battery))
         #if (self.battery < 3.4):
         #    print("Batería Crítica")
         #    _thread.start_new_thread(self.send,("Batería"," Crítica"))          # Se crea un hilo para el envío de alarma de batería
-        alarmaPub = Timer.Alarm(self.readsens,10, periodic=False)
+
 #------------------------------------------------------------------------------#
     def _compare_update(self):
         if self.raw is not self.last:
@@ -166,9 +182,7 @@ if (py.get_wake_reason() == WAKE_REASON_ACCELEROMETER):
         pass
     n = Node(data_rate,py)                                                      #Crea una instancia de Node
     n.readsens()
-    #n.py.setup_int_wake_up(rising=True,falling=False)                           #Activa la interrupcion para el boton DEBUG
-    #n.acc.enable_activity_interrupt(1000,100)                                   #Threshold= 2G, Min Time = 100ms
-    #n.py.go_to_sleep()                                                          #Dispositivo enviado a Deepsleep
+
 
 elif (py.get_wake_reason() == WAKE_REASON_PUSH_BUTTON):
     uart = UART(0, 115200)                                                      #Se activa la UART
@@ -193,12 +207,17 @@ else:                                                                           
     except (None):
         print("Error: Value could not be stored")
         pass
-    pycom.wifi_on_boot(False)                                                   # disable WiFi on boot TODO: Intentar en versiones posteriores, da un Core Error.
+    pycom.wifi_on_boot(False)                                                   #disable WiFi on boot TODO: Intentar en versiones posteriores, da un Core Error.
+    print('Desactivado Wifi On Boot')
     n = Node(data_rate,py)                                                      #Crea una instancia de Node
-    #n.connect(dev_eui,app_eui, app_key)                                         #Join LoRaWAN with OTAA
-    n.acc.set_full_scale(self, FULL_SCALE_4G)
-    n.acc.set_odr(self, ODR_50_HZ)
-    n.py.setup_int_wake_up(rising=True,falling=True)                           #Activa la interrupcion para el boton DEBUG
-    n.acc.enable_activity_interrupt(1000,100)                                   #Threshold= 2G, Min Time = 100ms
+    #n.connect(dev_eui,app_eui, app_key)                                        #Join LoRaWAN with OTAA
+    n.acc.set_full_scale(FULL_SCALE_4G)
+    print('Escala Acelerometro 4G')
+    n.acc.set_odr(ODR_800_HZ)
+    print('ODR 50Hz')
+    n.py.setup_int_wake_up(rising=True,falling=False)                           #Activa la interrupcion para el boton DEBUG
+    print('Activada Interrupccion de Actividad')
+    n.acc.enable_activity_interrupt(1500,100)                                   #Threshold= 1G, Min Time = 100ms
     print('Set Acc Interrupt.')
+    n.py.setup_sleep(300)
     n.py.go_to_sleep()

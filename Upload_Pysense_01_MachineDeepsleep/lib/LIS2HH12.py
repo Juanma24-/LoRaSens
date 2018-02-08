@@ -34,8 +34,6 @@ class LIS2HH12:
     ACC_Y_H_REG = const(0x2B)
     ACC_Z_L_REG = const(0x2C)
     ACC_Z_H_REG = const(0x2D)
-    FIFO_CTRL = const(0x2E)
-    FIFO_SRC = const(0x2F)
     ACT_THS = const(0x1E)
     ACT_DUR = const(0x1F)
 
@@ -86,20 +84,7 @@ class LIS2HH12:
         self.z = struct.unpack('<h', z)
         _mult = self.scales[self.full_scale] / ACC_G_DIV
         return (self.x[0] * _mult, self.y[0] * _mult, self.z[0] * _mult)
-    def acceleration_fifo(self):                                                #TODO: Unir a metodo acceleration
-        _mult = self.scales[self.full_scale] / ACC_G_DIV
-        i = 0
-        while True:
-            x = self.i2c.readfrom_mem(ACC_I2CADDR , ACC_X_L_REG, 2)
-            self.x[i] = struct.unpack('<h', x)[0] * _mult
-            y = self.i2c.readfrom_mem(ACC_I2CADDR , ACC_Y_L_REG, 2)
-            self.y[i] = struct.unpack('<h', y)[0] * _mult
-            z = self.i2c.readfrom_mem(ACC_I2CADDR , ACC_Z_L_REG, 2)
-            self.z[i] = struct.unpack('<h', z)[0] * _mult
-            empty = self.i2c.readfrom_mem(ACC_I2CADDR , FIFO_SRC, 2)            #Lee el registro actual
-            if (self.i2c.readfrom_mem(ACC_I2CADDR , FIFO_SRC, 2) & 0x20) == 1:  #Bit Empty está a 1.
-                break
-        return (self.x, self.y, self.z)
+
     def roll(self):
         x,y,z = self.acceleration()
         rad = math.atan2(-x, z)
@@ -136,22 +121,12 @@ class LIS2HH12:
 
         # enable the activity/inactivity interrupt
         self.i2c.readfrom_mem_into(ACC_I2CADDR , CTRL3_REG, self.reg)
-        self.reg[0] |= 0b00100000                                               #Inactivity Interrupt
+        self.reg[0] |= 0b00100000
         self.i2c.writeto_mem(ACC_I2CADDR , CTRL3_REG, self.reg)
 
         self._user_handler = handler
         self.int_pin = Pin('P13', mode=Pin.IN)
         self.int_pin.callback(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=self._int_handler)
-    def fifo_mode(self):
-        self.i2c.readfrom_mem_into(ACC_I2CADDR , CTRL3_REG, self.reg)           #Lee el registro actual
-        self.reg[0] = 0b11000010                                                #Activa FIFO_EN,STOP_FTH. Override Activity Interrupt
-        self.i2c.writeto_mem(ACC_I2CADDR , CTRL3_REG, self.reg)
-
-        self.i2c.readfrom_mem_into(ACC_I2CADDR , FIFO_CTRL, self.reg)           #Lee el registro actual
-        self.reg[0] = 0b00001000                                                #Bypass mode
-        self.i2c.writeto_mem(ACC_I2CADDR , FIFO_CTRL, self.reg)
-        self.reg[0] = 0b00101000                                                #FIFO mode
-        self.i2c.writeto_mem(ACC_I2CADDR , FIFO_CTRL, self.reg)
 
     def activity(self):
         if not self.debounced:

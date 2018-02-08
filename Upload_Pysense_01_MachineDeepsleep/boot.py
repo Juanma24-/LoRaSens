@@ -17,8 +17,8 @@ os.dupterm(uart)
 #wlan.deinit()
 #-----------------------#
 #Desactiva Bluetooth
-#bt = Bluetooth()
-#bt.deinit()
+bt = Bluetooth()
+bt.deinit()
 #-----------------------#
 #Imprime version del Firmware OS
 print('Version OS:' + os.uname().release)
