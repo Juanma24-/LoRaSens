@@ -12,11 +12,11 @@ cloud vía MQTT.
 __IMPORTANTE__  
 Para conservar la batería del dispositivo el máximo tiempo posible se hace uso
 de la función deepsleep. En Lopy + Pysense se puede entrar en deepsleep de dos
-formas: mediante la función de Lopy o mediante la función de Pysense. Se ha
-decidio utilizar la función de Pysense porque según este
+formas: mediante la función del módulo Lopy o mediante la función de la placa
+Pysense. Se ha decidido utilizar la función de Pysense porque según este
 [hilo de foro](https://forum.pycom.io/topic/1589/deep-sleep-summary/2) el
 consumo de batería en el modo de bajo consumo es mucho menor que utilizando la
-otra opción.
+otra opción (aún).
 
 Tutoriales de inicio:
 * https://github.com/ttn-liv/devices/wiki/Getting-started-with-the-PyCom-LoPy  
@@ -26,17 +26,6 @@ __NOTA__
 Esta app utiliza la función deepsleep del dispositivo Lopy. Cuando el
 dispositivo entra en deepsleep, se apagan la mayoría de sus funciones por lo que
  al despertar realiza un nuevo boot.  
-Esta característica afecta al envío de mensajes LoraWAN, concretamente al
-contador del mensaje. El contador siempre quedará en 1 si desde el Network
-Server no es confirmada la recepción del mensaje. Por lo tanto se tienen dos
-soluciones:  
-  * Deshabilitar en contador en el Network Server. Es una solución que disminuye
-    la seguridad de la red, pero una medida válida en pruebas.
-  * Utilizar un socket con mensajes confirmados. Es la mejor opción, pero debe
-    de estudiarse la carga Downlink a la que se somete el Gateway cuando la
-    cantidad de nodos crece. Se ha optado por esta solución en la app de prueba,
-    pero su correcto funcionamiento si la red crece depende de factores solo
-    comprobables una vez definidas las características de la red.
 
 Compilación sin placa
 --------------------------------------------------------------------------------
@@ -50,10 +39,10 @@ cd esp32
 make BOARD=LOPY -j5 LORA_BAND=USE_BAND_868 TARGET=boot clean
 make BOARD=LOPY -j5 LORA_BAND=USE_BAND_868 TARGET=boot
 make BOARD=LOPY -j5 LORA_BAND=USE_BAND_868 TARGET=app
-make BOARD=LOPY ESPPORT=/dev/cu.usbmodemPy343431 flash
-make BOARD=LOPY LORA_BAND=USE_BAND_868 flash
+make BOARD=LOPY LORA_BAND=USE_BAND_868 ESPPORT=/dev/cu.usbmodemPy343431 flash
 ~~~
 A la hora de hacer flash, la placa debe estar en modo de programación (P2 a GND).
+
 Arquitectura de la app
 --------------------------------------------------------------------------------
 La app se puede dividir en dos grupos: archivos de programa y librerías de
@@ -85,8 +74,8 @@ gateway y no sobrepasar las limitaciones que imponen algunos Network Servers, se
  hace necesario reducir el tamaño de los mensajes al máximo.  
 ### Envío
 El envío se realiza mediante el método _send_ de un socket previamente creado.
-El envío de datos está programado para enviar un array de bytes que contiene unicamente
-los valores de los sensores en un orden especifico. Este array es la minima
+El envío de datos está programado para enviar un tuple que contiene unicamente
+los valores de los sensores en un orden especifico. Este tuple es la minima
 cantidad de información que se puede enviar, conteniendo el payload del mensaje
 LoRaWAN solo la información necesaria.
 ### Recepción
@@ -145,6 +134,8 @@ mosquitto_pub -h <Region>.thethings.network -t '<AppID>/devices/<DevID>/down' -u
 El campo `payload_raw`debe estar codificado en Base64. Dado que las órdenes han
 sido diseñada en formato bytes (hexadecimal), se deben convertir utilizando una
 herramienta como [esta](http://tomeko.net/online_tools/hex_to_base64.php?lang=en)
+
+
 CONFIGURACIÓN NANOGATEWAY
 -------------------------------------------------------------------------------
 Para configurar el dispositivo LoPy que actuará como NanoGateway, solo hay que
@@ -211,8 +202,3 @@ git submodule update --init
 cd pycom-micropython-sigfox/mpy-cross
 make all
 ~~~
-
-DOWNGRADING (SOL. BRICK)
-------------------------------------
-Es necesario seguir el siguiente hilo del foro: [hilo](https://forum.pycom.io/topic/517/downgrading-firmware-advanced-users).  
-La conexión serie se realiza de manera más sencilla bajo el sistema operativo Windows. Además, si se tienen problemas para realizar la conexión con el dispositivo, se puede usar putty para llamarlo mediante `COM# baudrate=115200` y hacer posteriormente un reset.

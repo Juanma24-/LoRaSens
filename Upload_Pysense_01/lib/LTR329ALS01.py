@@ -35,7 +35,7 @@ class LTR329ALS01:
     ALS_RATE_1000 = const(0x04)
     ALS_RATE_2000 = const(0x05)
 
-    def __init__(self, pysense = None, sda = 'P22', scl = 'P21', gain = ALS_GAIN_8X, integration = ALS_INT_300, rate = ALS_RATE_1000):
+    def __init__(self, pysense = None, sda = 'P22', scl = 'P21', gain = ALS_GAIN_1X, integration = ALS_INT_100, rate = ALS_RATE_500):
         if pysense is not None:
             self.i2c = pysense.i2c
         else:

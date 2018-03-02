@@ -1,13 +1,13 @@
-README
+README (DEPRECATED)
 ================================================================================
-Esta carpeta una app desarrollada para Lopy + Pysense, en la cual se leen los
+Esta carpeta contiene una app desarrollada para Lopy + Pysense, en la cual se leen los
 sensores disponibles en la placa de forma períodica y se publican en formato
-JSON vía LoRaWAN.  
+RAW vía LoRaWAN a un network server.  
 Para conseguir la conectividad vía LoRaWan se ha hecho uso de otro dispositivo
 Lopy con el software lorananogateway también disponible en este repositorio.  
 El objetivo de este archivo es explicar la estructura de esta app y dar las
 instrucciones necesarias para configurar el dispositivo Lopy para realizar la
-conexión con éxito primero con el Network Server TTN y posterirormente con el
+conexión con éxito primero con el Network Server TTN y posteriormente con el
 cloud vía MQTT.
 
 __IMPORTANTE__
@@ -18,15 +18,15 @@ Tutoriales de inicio:
 
 Compilación sin placa
 --------------------------------------------------------------------------------
-Para compilar una aplicación sin necesidad de tner conectada un dispositivo
+Para compilar una aplicación sin necesidad de tener conectada un dispositivo
 LoPy al ordenador, es necesario instalar [pycom-micropython-sigfox](https://github.com/pycom/pycom-micropython-sigfox)
 (pasos a seguir al final de este documento), introducir los archivos de la app
 dentro de la carpeta _esp32/frozen_ y compilar de la siguiente forma:  
 ~~~
 cd esp32
-make BOARD=LOPY LORA_BAND=USE_BAND_868 TARGET=boot clean
-make BOARD=LOPY LORA_BAND=USE_BAND_868 TARGET=boot
-make BOARD=LOPY LORA_BAND=USE_BAND_868 TARGET=app
+make BOARD=LOPY LORA_BAND=USE_BAND_868 BTYPE=release TARGET=boot clean
+make BOARD=LOPY LORA_BAND=USE_BAND_868 BTYPE=release TARGET=boot
+make BOARD=LOPY LORA_BAND=USE_BAND_868 BTYPE=release TARGET=app
 ~~~
 Arquitectura de la app
 --------------------------------------------------------------------------------

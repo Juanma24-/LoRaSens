@@ -132,16 +132,16 @@ class Node:
         pressure = (int(self.mp.pressure())-90000).to_bytes(2,'little')                     #Segundo Elemento Lista: Presión (entero)
         humidity = int(round(self.si.humidity(),2)*100).to_bytes(2,'little')                #Tercer Elemento Lista: Humedad (dos decimales)
         temperature = int(round(self.si.temperature(),2)*100).to_bytes(2,'little')          #Cuarto Elemento Lista: Temperatura (dos decimales)
-        battery = int(round(self.py.read_battery_voltage(),2)*10000-30000).to_bytes(2,'little') #Quinto Elemento Lista: Voltaje (cuatro decimales)
+        battery = int(round(self.py.read_battery_voltage(),4)*10000-33000).to_bytes(2,'little') #Quinto Elemento Lista: Voltaje (cuatro decimales)
         light = int(self.lt.light()[0]).to_bytes(2,'little')                                #Primer Elemento Lista: Luminosidad (entero)
         reading = light+pressure+humidity+temperature+battery                   #Union de tipos bytes
         return reading
 #------------------------------------------------------------------------------#
 #Codigo principal
                                                                                 #Desactiva el heartbeat
-app_eui = binascii.unhexlify('70B3D57EF00042A4')                                #ID de la app. (Seleccionada por el usuario)
-dev_eui = binascii.unhexlify('0032140A05C8D228')
-app_key = binascii.unhexlify('1BCB628F002E926C77E9FDED7EB2C87C')                #Clave de la app para realizar el handshake. Única para cada dispositivo.
+app_eui = binascii.unhexlify('70B3D57ED0009F73')                                #ID de la app. (Seleccionada por el usuario)
+dev_eui = binascii.unhexlify('00F2DA4DA3ACB272')
+app_key = binascii.unhexlify('054BFCAC2632EB70D56F4BCBB8D95F02')                #Clave de la app para realizar el handshake. Única para cada dispositivo.
 ajuste = 10                                                                     #Numero de segundos para que el intervalo sea exacto en el Network Server
                                                                                 #TODO: REAL TIME
 py = Pysense()

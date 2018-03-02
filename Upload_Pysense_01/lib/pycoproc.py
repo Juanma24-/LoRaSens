@@ -3,7 +3,7 @@ from machine import I2C
 import time
 import pycom
 
-__version__ = '0.0.1'
+__version__ = '0.0.2'
 
 """ PIC MCU wakeup reason types """
 WAKE_REASON_ACCELEROMETER = 1
@@ -12,7 +12,7 @@ WAKE_REASON_TIMER = 4
 WAKE_REASON_INT_PIN = 8
 
 class Pycoproc:
-    """ class for handling interraction with PIC MCU """
+    """ class for handling the interaction with PIC MCU """
 
     I2C_SLAVE_ADDR = const(8)
 
@@ -85,28 +85,28 @@ class Pycoproc:
         self.wake_int_pin = False
         self.wake_int_pin_rising_edge = True
 
+        # Make sure we are inserted into the
+        # correct board and can talk to the PIC
         try:
             self.read_fw_version()
-        except Exception:
-            time.sleep_ms(2)
-        try:
-            # init the ADC for the battery measurements
-            self.poke_memory(ANSELC_ADDR, 1 << 2)
-            self.poke_memory(ADCON0_ADDR, (0x06 << _ADCON0_CHS_POSN) | _ADCON0_ADON_MASK)
-            self.poke_memory(ADCON1_ADDR, (0x06 << _ADCON1_ADCS_POSN))
-            # enable the pull-up on RA3
-            self.poke_memory(WPUA_ADDR, (1 << 3))
-            # make RC5 an input
-            self.set_bits_in_memory(TRISC_ADDR, 1 << 5)
-            # set RC6 and RC7 as outputs and enable power to the sensors and the GPS
-            self.mask_bits_in_memory(TRISC_ADDR, ~(1 << 6))
-            self.mask_bits_in_memory(TRISC_ADDR, ~(1 << 7))
+        except Exception as e:
+            raise Exception('Board not detected: {}'.format(e))
 
-            if self.read_fw_version() < 6:
-                raise ValueError('Firmware out of date')
+        # init the ADC for the battery measurements
+        self.poke_memory(ANSELC_ADDR, 1 << 2)
+        self.poke_memory(ADCON0_ADDR, (0x06 << _ADCON0_CHS_POSN) | _ADCON0_ADON_MASK)
+        self.poke_memory(ADCON1_ADDR, (0x06 << _ADCON1_ADCS_POSN))
+        # enable the pull-up on RA3
+        self.poke_memory(WPUA_ADDR, (1 << 3))
+        # make RC5 an input
+        self.set_bits_in_memory(TRISC_ADDR, 1 << 5)
+        # set RC6 and RC7 as outputs and enable power to the sensors and the GPS
+        self.mask_bits_in_memory(TRISC_ADDR, ~(1 << 6))
+        self.mask_bits_in_memory(TRISC_ADDR, ~(1 << 7))
 
-        except Exception:
-            raise Exception('Board not detected')
+        if self.read_fw_version() < 6:
+            raise ValueError('Firmware out of date')
+
 
     def _write(self, data, wait=True):
         self.i2c.writeto(I2C_SLAVE_ADDR, data)
@@ -187,6 +187,8 @@ class Pycoproc:
         except Exception:
             pass
         time_s = int((time_s * self.clk_cal_factor) + 0.5)  # round to the nearest integer
+        if time_s >= 2**(8*3):
+            time_s = 2**(8*3)-1
         self._write(bytes([CMD_SETUP_SLEEP, time_s & 0xFF, (time_s >> 8) & 0xFF, (time_s >> 16) & 0xFF]))
 
     def go_to_sleep(self, gps=True):
@@ -232,14 +234,21 @@ class Pycoproc:
         self._write(bytes([CMD_CALIBRATE]), wait=False)
         self.i2c.deinit()
         Pin('P21', mode=Pin.IN)
-        pulses = pycom.pulses_get('P21', 50)
+        pulses = pycom.pulses_get('P21', 100)
         self.i2c.init(mode=I2C.MASTER, pins=(self.sda, self.scl))
+        idx = 0
+        for i in range(len(pulses)):
+            if pulses[i][1] > EXP_RTC_PERIOD:
+                idx = i
+                break
         try:
-            period = pulses[2][1] - pulses[0][1]
+            period = pulses[idx][1] - pulses[(idx - 1)][1]
         except:
-            pass
+            period = 0
         if period > 0:
             self.clk_cal_factor = (EXP_RTC_PERIOD / period) * (1000 / 1024)
+        if self.clk_cal_factor > 1.25 or self.clk_cal_factor < 0.75:
+            self.clk_cal_factor = 1
 
     def button_pressed(self):
         button = self.peek_memory(PORTA_ADDR) & (1 << 3)
