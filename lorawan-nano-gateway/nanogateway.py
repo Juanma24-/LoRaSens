@@ -160,6 +160,7 @@ class NanoGateway:
         self._log('Setting up the LoRa radio at {} Mhz using {}', self._freq_to_float(self.frequency), self.datarate)
         self.lora = LoRa(
             mode=LoRa.LORA,
+			region=LoRa.EU868,
             frequency=self.frequency,
             bandwidth=self.bw,
             sf=self.sf,
@@ -252,6 +253,7 @@ class NanoGateway:
             self.txnb += 1
             lora.init(
                 mode=LoRa.LORA,
+				region=LoRa.EU868,
                 frequency=self.frequency,
                 bandwidth=self.bw,
                 sf=self.sf,
@@ -333,6 +335,7 @@ class NanoGateway:
 
         self.lora.init(
             mode=LoRa.LORA,
+			region=LoRa.EU868,
             frequency=frequency,
             bandwidth=self._dr_to_bw(datarate),
             sf=self._dr_to_sf(datarate),
@@ -340,7 +343,7 @@ class NanoGateway:
             coding_rate=LoRa.CODING_4_5,
             tx_iq=True
             )
-        while utime.ticks_us() < tmst:
+        while utime.ticks_cpu() < tmst:
             pass
         self.lora_sock.send(data)
         self._log(
@@ -370,7 +373,7 @@ class NanoGateway:
                     ack_error = TX_ERR_NONE
                     tx_pk = ujson.loads(data[4:])
                     tmst = tx_pk["txpk"]["tmst"]
-                    t_us = tmst - utime.ticks_us() - 15000
+                    t_us = tmst - utime.ticks_cpu() - 15000
                     if t_us < 0:
                         t_us += 0xFFFFFFFF
                     if t_us < 20000000:

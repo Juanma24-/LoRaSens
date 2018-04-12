@@ -1,0 +1,52 @@
+# Compiled Sources
+###################
+*.o
+*.a
+*.elf
+*.bin
+*.map
+*.hex
+*.dis
+*.exe
+
+# Packages 
+############
+
+# Logs and Databases
+######################
+*.log
+
+# VIM Swap Files
+######################
+*.swp
+
+# Build directory
+######################
+build/
+
+# Test failure outputs
+######################
+tests/*.exp
+tests/*.out
+
+# Python cache files
+######################
+__pycache__/
+*.pyc
+
+# Customized Makefile/project overrides
+######################
+GNUmakefile
+user.props
+.cproject
+.project
+.pydevproject
+.settings
+
+# Key files (for Flash Encryption and Secure Boot)
+secure_boot_signing_key.pem
+signature_verification_key.bin
+secure-bootloader-key.bin
+flash_encryption_key.bin
+ 
+.DS_Store

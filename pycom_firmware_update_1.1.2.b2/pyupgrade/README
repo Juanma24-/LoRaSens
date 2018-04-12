@@ -1,0 +1,4 @@
+If you're reading this, most probably you're using *nix. This tool comes in 2 forms:
+
+TUI (recomended for unix): run "./update" (needs dialog, python and py-serial).
+GUI (Qt dependencies): run python2 lopyupdate.py (needs py-qscintilla py-setuptools py-serial py-requests and its dependencies).

@@ -1,0 +1,454 @@
+#!/usr/bin/env bash
+
+#   Copyright (c) 2016-2017, Pycom Limited.
+#
+#   This software is licensed under the GNU GPL version 3 or any
+#   later version, with permitted additional terms. For more information
+#   see the Pycom Licence v1.0 document supplied with this file, or
+#   available at https://www.pycom.io/opensource/licensing
+
+ORIGINAL_PWD=$PWD
+TOOL_VERSION=67634306
+
+UPDATE_TYPE=all
+
+SERVER_URL="https://software.pycom.io"
+
+# trap ctrl-c
+trap go_out INT
+
+setup_temp () {
+    TEMP_DIR=$(mktemp -d)
+    TEMP_FILE=${TEMP_DIR}/tmpfile
+}
+
+go_out () {
+    rm ${TEMP_FILE} 2> /dev/null
+    rm -R ${TEMP_DIR} 2> /dev/null
+    cd ${ORIGINAL_PWD}
+    clear
+    echo "${update_result}"
+    exit
+}
+
+abort_on_error () {
+    [ $? -ne 0 ] && exit 1
+}
+
+select_http_tool () {
+    curl > /dev/null 2>&1
+    if [ $? -eq 127 ]; then
+        wget > /dev/null 2>&1
+        if [ $? -eq 127 ]; then
+            echo "Error: This program needs 'wget' or 'curl' to run. Please install one in your system."
+            exit 1
+        fi
+        http_tool="wget_request"
+    else
+        http_tool="curl_request"
+    fi
+}
+
+wget_request () {
+    local query="$2"
+    [ -n "${query}" ] && query="?${query}"
+
+    if [ -n "$3" ];then
+        wget -qSO- --post-data "$3" --header="Content-Type:application/json" "$SERVER_URL""$1""${query}" 2> "${TEMP_FILE}"
+    else
+        wget -qSO- "${post}" "$SERVER_URL""$1""${query}" 2> "${TEMP_FILE}"
+    fi
+
+    return $(grep "HTTP/" "${TEMP_FILE}" | sed 's#.*HTTP/[0-9].[0-9] \([0-9]*\).*#\1#' | tail -1)
+}
+
+curl_request () {
+    local query="$2"
+    [ -n "${query}" ] && query=$(echo "?${query}" | sed 's/ /%20/g')
+
+    if [ -n "$3" ];then
+        curl -sL -w "\n%{http_code}" -d "$3" -H "Content-Type: application/json" "$SERVER_URL$1${query}" > "${TEMP_FILE}"
+    else
+        curl -sL -w "\n%{http_code}" "$SERVER_URL$1${query}" > "${TEMP_FILE}"
+    fi
+
+    sed \$d "${TEMP_FILE}"
+    return $(tail -1 "${TEMP_FILE}")
+}
+
+call_find_upgrade () {
+    ${http_tool} "/findupgrade" "$1"
+}
+
+call_insert_device () {
+    if [ -n $3 ]; then
+        smac_string='[{"id": "'"$3"'", "type": "lpwan"}]'
+    else
+        smac_string='[]'
+    fi
+    ${http_tool} "/device/insert" "" '{"wmac": "'$1'", "toolversion": '$TOOL_VERSION', "name": "'"$2"'", "smac":'"${smac_string}"'}'
+}
+
+call_insert_device_sigfox () {
+    ${http_tool} "/device/insert/sigfox" "" '{"wmac": "'$1'", "toolversion": '$TOOL_VERSION', "name": "'"$2"'", "client": "pycom", "zone": '"$4"', "smac": [{"id": "'"$3"'", "type": "lpwan"}]}'
+}
+
+call_get_device_info () {
+    info=$(${http_tool} "/device/get/$1" "toolversion=$TOOL_VERSION")
+
+    if [ $? != 200 ]; then
+        return 1
+    fi
+
+    info=$(echo "${info}" | tr ',' '\n')
+    mem_dump_base64=$(echo "${info}" | grep binary | sed 's/.*:[" ]*\([^"}]*\).*/\1/')
+    sig_id=$(echo "${info}" | grep sig_id | sed 's/.*:[" ]*\([^"}]*\).*/\1/')
+    sig_pac=$(echo "${info}" | grep sig_pac | sed 's/.*:[" ]*\([^"}]*\).*/\1/')
+    firmware_type=$(echo "${info}" | grep firmware_type | sed 's/.*:[" ]*\([^"}]*\).*/\1/')
+    return 0
+}
+
+call_fwversion () {
+    ${http_tool} "/device/update/fwversion" "" '{"wmac": "'$1'", "toolversion": '$TOOL_VERSION', "version": "'"$2"'"}'
+}
+
+
+get_lora_freq_table () {
+    loraFreqTable=$(call_find_upgrade "key=lopy.freqlist&redirect=true&type=${UPDATE_TYPE}" |
+                sed 's/\[\(.*\)\]/\1/' | tr -d '[]' | tail -n +2 | sed 's/^ *//' | sed 's/,$//')
+    loraFreqTable+=$'\n'"\"Not in the list\",0"
+}
+
+get_sigfox_zone_table () {
+    sigfoxZoneTable=$(call_find_upgrade "key=sipy.freqlist&redirect=true&type=${UPDATE_TYPE}" |
+                sed 's/\[\(.*\)\]/\1/' | tr -d '[]' | tail -n +2 | sed 's/^ *//' | sed 's/,$//')
+}
+
+get_new_updater_version () {
+    new_updater_version=$(($(call_find_upgrade "key=pycom-firmware-updater.unix&redirect=false&type=${UPDATE_TYPE}" |
+                        grep -o '"intVersion":[0-9]*' | sed 's/.*:\([0-9]*\)/\1/')))
+    echo $new_updater_version
+}
+
+get_recent_firmware_version () {
+    recent_wipy_version=$(call_find_upgrade "key=wipy.wipy%20with%20esp32&redirect=false&type=${UPDATE_TYPE}" |
+                        tr ',' '\n' | grep version | sed 's/"version":"\(.*\)"/\1/')
+    recent_lopy_version=$(call_find_upgrade "key=lopy.lopy%20with%20esp32.868&redirect=false&type=${UPDATE_TYPE}" |
+                        tr ',' '\n' | grep version | sed 's/"version":"\(.*\)"/\1/')
+    recent_sipy_version=$(call_find_upgrade "key=sipy.sipy%20with%20esp32&redirect=false&type=${UPDATE_TYPE}" |
+                        tr ',' '\n' | grep version | sed 's/"version":"\(.*\)"/\1/')
+}
+
+get_firmware_upgrade () {
+    call_find_upgrade "key=${firmware_type}&redirect=true&type=${UPDATE_TYPE}" > "${TEMP_DIR}/update.tar.gz"
+}
+
+test_for_dialog () {
+    dialog > /dev/null 2>&1
+    if [ $? -eq 127 ];then
+        echo "Error: This program needs 'dialog' to run. Please install it in your system."
+        exit 1
+    fi
+}
+
+print_new_tool_screen () {
+    if [ $new_updater_version -gt $TOOL_VERSION ]; then
+        dialog --ok-label "Next" --title 'New version' --msgbox '\nThere is a new version of this tool, please update it.' 10 45
+    fi
+}
+
+print_welcome_screen () {
+    dialog --ok-label "Next" --title 'Start' --msgbox '\nThis wizard will help you upgrade your Pycom board firmware.\n\nBoth the wizard and the firmware it installs are covered by the Pycom License: https://www.pycom.io/opensource/licensing/' 10 65
+}
+
+get_dialog_output () {
+    cat "${TEMP_FILE}"
+}
+
+device_dialog () {
+    dialog --ok-label "Next" --title "Device selection" --menu "Please select the type of device from the list:" 10 55 3 1 "WiPy 2.0" 2 "LoPy" 3 "SiPy" 2> ${TEMP_FILE}
+    abort_on_error
+}
+
+ask_device_dialog () {
+    device_dialog
+    device="$(get_dialog_output)"
+    case ${device} in
+        1)
+            device=WiPy
+            deviceVersion=${recent_lopy_version}
+        ;;
+        2)
+            device=LoPy
+            deviceVersion=${recent_wipy_version}
+        ;;
+        3)
+            device=SiPy
+            deviceVersion=${recent_sipy_version}
+        ;;
+        "")
+            go_out
+        ;;
+    esac
+}
+
+
+speed_dialog () {
+    dialog --checklist "Choose speed:" 8 40 1 1 "High speed" on 2> ${TEMP_FILE}
+    abort_on_error
+}
+
+ask_speed_dialog () {
+    speed_dialog
+    speed="$(get_dialog_output)"
+    if [ ${speed} == '1' ]; then
+        speed=921600
+    else
+        speed=115200
+    fi
+}
+
+ask_country_dialog () {
+    echo "$loraFreqTable" | cut -f1 -d "," | nl -nrn -s '. ' -w2 | xargs dialog --ok-label "Next" --title "Country selection" --menu "Please choose your country from the list:" 15 55 8 2> ${TEMP_FILE}
+    abort_on_error
+}
+
+ask_country () {
+    ask_country_dialog
+    country_num="$(get_dialog_output | tr -d '.')"
+    if [ -z "${country_num}" ]; then
+        go_out
+    fi
+}
+
+ask_zone_dialog () {
+    echo "$sigfoxZoneTable" | cut -f1 -d "," | nl -nrn -s '. ' -w2 | xargs dialog --ok-label "Next" --title "Country selection" --menu "Please choose your country/region from the list:" 15 55 8 2> ${TEMP_FILE}
+    abort_on_error
+}
+
+ask_zone () {
+    ask_zone_dialog
+    zone_num="$(get_dialog_output | tr -d '.')"
+    if [ -z "${zone_num}" ]; then
+        go_out
+    fi
+}
+
+get_country_freq_by_id () {
+    echo "${loraFreqTable}" | sed "${country_num}q;d" | cut -f2 -d ","
+}
+
+get_sigfox_zone_by_id () {
+    echo "${sigfoxZoneTable}" | sed "${zone_num}q;d" | cut -f2 -d ","
+}
+
+instructions_dialog () {
+    lowercase_device=$(echo ${device} | tr '[:upper:]' '[:lower:]')
+    dialog --ok-label "Next" --colors --title 'Setup' --msgbox  \
+"\nPlease follow these instructions:\n\
+1. Turn off your device.\n\
+2. Connect a jumper cable between \ZbG23\ZB and \ZbGND\ZB on the expansion board.\n\
+3. Connect the expansion board to the computer using the USB cable.\n\
+\n\
+Notes: Looking at the device with the LED on the top side,\n\
+       G23 is the \Zb4th\ZB pin from top on the left side.\n\
+       GND is the \Zb2nd\ZB pin from top on the right side.\
+\n\n\
+In case you don't have an expansion board available, you need to connect the device \
+to the computer using a serial port, and also perform step 2." 17 80
+}
+
+advanced_freq_dialog () {
+    dialog --ok-label "Next" --title "Frequency selection" --menu "Please select your country's LoRa band from the list:" 10 60 2 1 "868 MHz" 2 "915 MHz" 2> ${TEMP_FILE}
+    abort_on_error
+}
+
+ask_advanced_freq () {
+    advanced_freq_dialog
+    freq="$(get_dialog_output)"
+    case ${freq} in
+        1)
+            freq=868
+        ;;
+        2)
+            freq=915
+        ;;
+        "")
+            go_out
+        ;;
+    esac
+}
+
+freq_selection_process () {
+    ask_country
+    freq=$(get_country_freq_by_id)
+    if [ "${freq}" = "0" ]; then
+        echo "must select an advanced freq"
+        ask_advanced_freq
+    fi
+}
+
+zone_selection_process () {
+    ask_zone
+    sigfox_zone=$(get_sigfox_zone_by_id)
+}
+
+serial_port_dialog () {
+    local suggested=$(ls /dev/ttyUSB* /dev/tty.usbserial* 2> /dev/null | head -1)
+
+    dialog --inputbox "Please provide the serial port path:" 8 50 "${suggested}" 2> ${TEMP_FILE}
+    abort_on_error
+}
+
+ask_serial_port () {
+    serial_port_dialog
+    serial_port="$(get_dialog_output)"
+    ls ${serial_port} > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        dialog --ok-label "Finish" --title "Error" --msgbox "\nInvalid serial port." 7 25
+        exit
+    fi
+}
+
+show_failure () {
+    label="Failure"
+    message="\nSomething failed trying to contact the server."
+    dialog --ok-label "Finish" --title "${label}" --msgbox "${message}" 7 55
+}
+
+show_comm_failure () {
+    label="Failure"
+    message="\nSomething failed trying to connect to the device."
+    dialog --ok-label "Finish" --title "${label}" --msgbox "${message}" 7 55
+    return 0
+}
+
+show_communicate_infobox () {
+    dialog  --title "Connecting..." --infobox "\n\nConnecting to the device to get it's information, please wait." 8 45
+}
+
+show_query_infobox () {
+    dialog  --title "Fetching info..." --infobox "\n\nFetching the device's information from the server, please wait." 8 45
+}
+
+show_download_infobox () {
+    dialog  --title "Downloading..." --infobox "\n\nRetriving the firmware upgrade from the server, please wait." 8 45
+}
+
+show_wait_infobox () {
+    dialog  --title "Upgrading..." --infobox "\nPlease be patient while the firmware is being uploaded to the board.\n\n(this can take up to a minute)." 8 45
+}
+
+show_result_window () {
+    echo $firmware_type | grep sipy > /dev/null
+    if [ $? -eq 0 ]; then
+        extra="\n\nSigfox: ID = ${sig_id}, PAC = ${sig_pac}"
+    fi
+    case ${update_status} in
+        0)
+            label="Success"
+            message="\nYour device was successfully updated to version ${recent_version}\n\nPlease remove the wire and reset the board.${extra}"
+            update_result=""
+            extra_lines=2
+        ;;
+        *)
+            label="Failure"
+            message="\nThe upgrade failed!\n\nNext screen will show the update process log."
+        ;;
+    esac
+    dialog --ok-label "Finish" --title "${label}" --msgbox "${message}" $((10 + extra_lines)) 50
+}
+
+do_update () {
+    FILE="${TEMP_DIR}/update.tar.gz"
+    ./bin/updater.py -c --port "${serial_port}" --speed ${speed} --tar "${FILE}" flash > ${TEMP_FILE} 2>&1
+    update_status=$?
+    update_result="$(get_dialog_output)"
+}
+
+write_config_block () {
+    ./bin/updater.py -c --port "${serial_port}" --speed ${speed} --address $((4 * 1024 * 1024 - 4 * 1024)) --contents "${mem_dump_base64}" write
+}
+
+get_wmac () {
+    wmac=$(./bin/updater.py --port "${serial_port}" --speed ${speed} wmac)
+    [ $? -ne 0 ] && show_comm_failure && exit 1
+    wmac=$(echo ${wmac} | grep -o 'WMAC=.*' | sed 's/WMAC=\(.*\)/\1/')
+}
+
+get_smac () {
+    smac=$(./bin/updater.py --port "${serial_port}" --speed ${speed} -c smac)
+    [ $? -ne 0 ] && show_comm_failure && exit 1
+    smac=$(echo ${smac} | grep -o 'SMAC=.*' | sed 's/SMAC=\(.*\)/\1/')
+}
+
+main () {
+    test_for_dialog
+    select_http_tool
+    setup_temp
+    get_new_updater_version
+    get_recent_firmware_version
+    cd "$(exec 2>/dev/null;cd -- $(dirname "$0"); unset PWD; /usr/bin/pwd || /bin/pwd || pwd)"
+    print_new_tool_screen
+    print_welcome_screen
+    instructions_dialog
+    ask_serial_port
+    ask_speed_dialog
+    show_communicate_infobox
+    get_wmac
+    get_smac
+    show_query_infobox
+    call_get_device_info ${wmac}
+    if [  $? -ne 0 ]; then
+        ask_device_dialog
+        show_query_infobox
+        case ${device} in
+            "LoPy")
+                get_lora_freq_table
+                freq_selection_process
+                firmware_type="lopy.lopy with esp32.${freq}"
+                call_insert_device ${wmac} "${firmware_type}" ${smac}
+            ;;
+            "SiPy")
+                get_sigfox_zone_table
+                ask_zone
+                firmware_type="sipy.sipy with esp32"
+                call_insert_device_sigfox ${wmac} "${firmware_type}" ${smac} ${zone_num}
+            ;;
+            "WiPy")
+                firmware_type="wipy.wipy with esp32"
+                call_insert_device ${wmac} "${firmware_type}"
+            ;;
+        esac
+
+        call_get_device_info ${wmac}
+        if [  $? -ne 0 ]; then
+            show_failure
+            exit
+        fi
+    fi
+
+    case ${firmware_type} in
+        lopy.*)
+            recent_version="${recent_lopy_version}"
+            ;;
+        sipy.*)
+            recent_version="${recent_sipy_version}"
+            ;;
+        wipy.*)
+            recent_version="${recent_wipy_version}"
+            ;;
+    esac
+
+    show_download_infobox
+    get_firmware_upgrade
+    show_wait_infobox
+    do_update
+    write_config_block
+    update_result=$?
+    call_fwversion "${wmac}" "${recent_version}"
+    show_result_window $update_result
+    go_out
+}
+
+main
