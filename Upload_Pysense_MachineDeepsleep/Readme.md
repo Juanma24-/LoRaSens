@@ -5,14 +5,16 @@ This Library files and "_main.py" file should not be modified. Only "_boot.py"
 can be modified in order to show more info about the device on the boot or to
 enable UART for debugging purposes.
 
-__IMPORTANT__
+__IMPORTANT__  
 To keep the device battery as much time as possible, deepsleep function is used.
 Using LoPy and Pysense, deepsleep can be accessed in two different ways: using
 the LoPy function and using the Pysense function.  
 
-It has been decided to used the Pysense function because using this hardware
-configuration is the option with the best performance. This [forum thread](https://forum.pycom.io/topic/1589/deep-sleep-summary/2)
-confirms it.
+It has been decided to used the Lopy function although using this hardware
+configuration it is not the option with the best performance. This
+[forum thread](https://forum.pycom.io/topic/1589/deep-sleep-summary/2) confirms
+it. Nevertheless, this app is intended to be used without the Pysense or when
+the Pysense firmware will be released or improved.
 
 __INIT TUTORIAL__
 * https://github.com/ttn-liv/devices/wiki/Getting-started-with-the-PyCom-LoPy  
@@ -33,6 +35,8 @@ configuration and copy it to the pycom firmware (need to check the path).
 Next step is to execute the FullBuild shell script on
 `/pycom-micropython-sigfox/esp32/` which can be downloaded on
 [pycom-micropython-sigfox](https://github.com/Juanma24-/pycom-micropython-sigfox).
+If this firmware is downloaded, the user can avoid the first step of the next
+section.
 
 
 COMPILE SOFTWARE INSTALATION
@@ -73,6 +77,7 @@ git submodule update --init
 cd pycom-micropython-sigfox/mpy-cross
 make all
 ~~~
+
 
 BUILD PROCESS
 --------------------------------------------------------------------------------

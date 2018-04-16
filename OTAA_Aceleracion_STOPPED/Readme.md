@@ -1,200 +1,157 @@
 README
 ================================================================================
-Esta carpeta contiene una app desarrollada para Lopy + Pysense, en la cuál se
-lee la aceleración del dispositivo (en Gs) y si supera unos máximos se envían
-los valores vía LoRaWAN hasta el Network Server configurado en el Gateway.  
-Como funcionalidades auxiliares, se pueden enviar mensaje de tipo downlink
-(gateway -> nodo) para activar/cancelar la lectura de la aceleración o para
-modificar el data rate de envío de datos del dispositivo (útil cuando hay gran
-número de dispositivos).
-Para conseguir la conectividad vía LoRaWan se ha hecho uso de otro dispositivo
-Lopy con el software "lorananogateway" también disponible en este repositorio.
-Como su nombre indica, este otro dispositivo actúa como Gateway recogiendo los
-datos de los nodos y enviando esos datos al Network Server (por defecto
-[TTN](https://www.thethingsnetwork.org/)), también puede actuar en la
-configuración inversa.  
-El objetivo de este archivo es explicar la estructura de esta app y dar las
-instrucciones necesarias para configurar el dispositivo Lopy, para realizar la
-conexión con éxito, primero con el Network Server TTN y posteriormente con el
-cloud vía MQTT.
+This folder contains an app developed for Lopy + Pysense in which it is read the  
+device acceleration (in Gs) and if this acceleration is above a maximum, the
+values are sent via LoRaWAN to the Network Server.  
+As auxiliary funcionalities, it is possible to enable/disable the acceleration
+measurement with a downlink message or to modify the data rate of the device
+sending.
 
-__IMPORTANTE__
+__IMPORTANT__
 
-Tutoriales de inicio:
+Init Tutorials:
 * https://github.com/ttn-liv/devices/wiki/Getting-started-with-the-PyCom-LoPy  
 * https://docs.pycom.io/pycom_esp32/index.html
 
-
-
-Compilación sin placa
+BUILD
 --------------------------------------------------------------------------------
 Para compilar una aplicación sin necesidad de tener conectado un dispositivo
 LoPy al ordenador, es necesario instalar
-[pycom-micropython-sigfox](https://github.com/pycom/pycom-micropython-sigfox)
-(pasos a seguir al final de este documento), introducir los archivos de la app
-dentro de la carpeta _esp32/frozen_ y compilar de la siguiente forma:  
+To make the build it is needed to follow first the section INSTALL FIRMWARE,
+insert the app files inside _esp32/frozen_ folder and build:
 ~~~
 cd esp32
-make BOARD=LOPY LORA_BAND=USE_BAND_868 TARGET=boot clean
-make BOARD=LOPY LORA_BAND=USE_BAND_868 TARGET=boot
-make BOARD=LOPY LORA_BAND=USE_BAND_868 TARGET=app
+make BOARD=LOPY4 LORA_BAND=USE_BAND_868 clean
+make BOARD=LOPY4 LORA_BAND=USE_BAND_868 TARGET=boot
+make BOARD=LOPY4 LORA_BAND=USE_BAND_868 TARGET=app
 ~~~
-Arquitectura de la app
---------------------------------------------------------------------------------
-La app solo contiene 3 archivos; el archivo de boot, la app en sí y la librería
-del sensor. El árbol de archivos es el siguiente:  
-* OTAA_Aceleracion->  
-    * boot.py (Inicia y selecciona el archivo main)   
-    * otaa_node_acc.py (archivo principal)
-    * LIS2HH12.py (libreria del acelerometro)
+To make things easier, there is a shell script named FullBuild.sh which can be
+downloaded [here](https://github.com/Juanma24-/pycom-micropython-sigfox/tree/master/esp32).
 
-Los tres primeros archivos deben ir colocados en la raíz del sistema de archivos
-del módulo LoPy (/flash), la librería del sensor debe introducirse en la carpeta
-/lib de la memoria interna del dispositivo.
-
-Uso de la app (envío/recepción de datos)
+APP ARQUITECTURE
 --------------------------------------------------------------------------------
-El envío/recepción de datos desde/hacia el nodo de la red se realiza mediante el
-protocolo LoRaWAN, por lo que para optimizar el consumo de energía, el uso del
-gateway y no sobrepasar las limitaciones que imponen algunos Network Servers, se
- hace necesario reducir el tamaño de los mensajes al máximo.  
-### Envío
-El envío se realiza mediante el método _send_ de un socket previamente creado.
-El envío de datos está programado para enviar un tuple que contiene unicamente
-los valores del sensor en un orden especifico. En este caso se envía un array de
-6 valores, la aceleracion de los 3 ejes antes de superar el valor límite y la
-aceleración en los 3 ejes tras superarlo. Este tuple es la mínima cantidad de
-información que se puede enviar, conteniendo el payload del mensaje LoRaWAN solo
-la información necesaria.  
-En el caso concreto de esta aplicación, no todas las medidas son enviadas al
-dispositivo, sin embargo, la frecuencia de toma de datos será superior a la
-máxima frecuencia de envío de datos. Esto puede derivar en errores de envío al
-estar el socket ocupado cuando un mensaje quiere ser enviado. Para evitar este
-posible problema se ha hecho uso de threads y semáforo binarios. El recurso
-limitado (socket) solo puede ser utilizado por un thread, mientras que el resto
-espera a que esté libre.
-### Recepción
-La recepción de datos se realiza tras el envío de datos, si se recibe una cadena
-concreta, se modifica el intervalo de toma de datos del dispositivo por el nuevo
-recibido o se cancela la toma de datos.
-* Mensaje de modificación de intervalo  
-  Este mensaje no tiene una longitud máxima definida, ya que depende del numero
-  de segundos del intervalo en representación hexadecimal. La longitud mínima es
-  de 2 bytes, correspondiendo el primer byte al código ASCII de la letra 'I' en
-  hexadecimal (0x49). El resto del payload corresponde al numero de segundos del
-   intervalo en formato hexadecimal.  
-  E.g: `49 64`= I 100
-* Mensaje de cancelación
-  Solo se envía en caracter ASCII "C" indicando la cancelación de las lecturas.
+The app only contains 5 files; boot file, the main app and the sensor library (3).
+The tree file is this:  
+* Main Folder->  
+    * boot.py (Init and select main file)   
+    * otaa_node_acc.py (main file)
+    * LIS2HH12.py (accelerometer library)
+    * pysense.py
+    * pycoproc.py
+
+
+_If the files are charged via FTP._  
+The first 2 file must be put on the flash folder of the file system of the
+device (/flash). The sensor library must be put on the /lib folder of the intern
+memory of the device.  
+_If the files are charged via flashing firmware._  
+The boot file must be renamed to _boot and the ota_node_acc file must be renamed
+to _main.
+
+APP USE (DATA SENDING AND RECEPTION)
+--------------------------------------------------------------------------------
+The sending/reception of data to/from the node is made by LoRaWAN protocol,
+therefore to optimize the power consumption, gateway use and not to overpass
+limitations some Network Servers have, it is needed to the reduce the message
+size to its minimum.
+
+### Sending
+Data sending is programmed to send a bytes string that contains only the sensor
+value in a specific order. An array of 6 values are sent; the 3 axis acceleration
+before overpassed the threshold and the 3 axis acceleration once the threshold
+has been overpassed. This string is the minimum quantity of information that can
+be send.  
+In this app not all the measturements are sent to the device, however, the
+measurement frequency will be superior to the maximum data sending frequency.
+This can bring sending errors if the socket is busy when another message wants
+to be sent. To solve this problem the use of threads and mutex to access a
+shared resource has been used.
+### Reception
+Data reception takes place after data sending, if a correct string is received,
+three different options can be execute.
+
+* _Interval Change Message_  
+   This message has not a maximum defined length because it depends on the number
+   of seconds in hexadecimal. The minimum length is 2 bytes, being the first
+   byte the ASCII code of "I" letter on hexadecimal code (0x49). The rest of the
+   payload corresponds to the number of seconds on hexadecimal code.
+   E.g: `49 64`= I 100
+* _Cancel Message_  
+  The ASCII letter "C" is sent to cancel the measurement.
   E.g: `43` = C
-* Mensaje de Modificación de Data Rate
-  Este mensaje permite modificar de forma dinámica el data rate de envío del
-  dispositivo. Al estar fijados los valores de Data Rate (0,5), la longitud
-  también está definida en 2 bytes. El primer byte corresponde con el código
-  ASCII de la letra "R" (0x52). El segundo byte corresponde al nuevo data rate.
+  The ASCII letter "C" is sent to cancel the measurement.
+* _Data Rate Modification Message_  
+  This message allows to modify data rate in a dinamic way. Data Rate values are
+  fixed (0 to 5), therefore length is also fixed to 2 bytes. First bytes
+  corresponds to ASCII letter "R" (0x52). Second byte corresponds to the new
+  data rate.
   E.g: `52 05`= R 5
 
-__IMPORTANTE__
-Aunque las codificaciones estan realizadas en formato hexadecimal, el
-dispositivo las convierte a decimal, por lo que hay que tener cuidado si se
-comparan cadenas de números.
-
+__IMPORTANT__  
+Although codifications are done in hexadecimal format, the device turns them
+into decimal, therefore the user has to take into account that if number strings
+have to be compared.
 
 
 MQTT
 --------------------------------------------------------------------------------
-Para comprobar si el dispositivo y el Network Server están enviando los mensajes
- de forma corrrecta así como enviar mensajes downlink, se puede configurar
- Mosquitto de la siguiente forma:
+To check if the device and the Network Server are working fine and sending the
+messages on a right way, the mqtt client Mosquitto can be configure in the next
+way:
 
-__ATENCIÓN!! TODAS ESTAS ÓRDENES ESTÁN CONFIGURADAS PARA USAR THETHINGSNETWORK
-COMO NETWORK SERVER__
+__ATTENTION!! EVERY ORDER ARE THOUGHT TO BE USE WITH TTN NETWORK SERVER__
 
-### Subscripción
+### Subscription
 ```
 mosquitto_sub -h eu.thethings.network:1883 -t '<AppId/devices/<DevID>/up' -u
 '<AppID>' -P '<AppKey>' -v
 ```
-Todos los campos a rellenar pueden ser encontrados en la descripción de la app
-creada en TTN.
+Every field to be complete can be found on the app description created on TTN.
 
-### Publicación
-La publicación se realizará a través del broker privado hacia el Network Server.
-A partir de Network Server o más concretamente desde el Gateway, el protocolo
-MQTT será sustituido a LoRaWAN, disminuyendo el payload a un vector de números
-con un orden y un significado concreto y conocido.
-Para enviar un comando de los definidos en el apartado anterior, se debe mandar
-la siguiente orden (ejemplo relaizado en Mosquitto):
+### Publish
+To send a command (defined on the last section), the next order must be called:
 ~~~
 mosquitto_pub -h <Region>.thethings.network -t '<AppID>/devices/<DevID>/down' -u
  '<AppID>' -P '<AppKey>' -m '{"payload_raw":""}'
 ~~~
-El campo `payload_raw`debe estar codificado en Base64. Dado que las órdenes han
-sido diseñada en formato bytes (hexadecimal), se deben convertir utilizando una
-herramienta como [esta](http://tomeko.net/online_tools/hex_to_base64.php?lang=en)
+The `payload_raw`field has to be codified in Base64. Due to orders has been
+designed in bytes format (hexadecimal), they have to be convert using a tool
+like [this](http://tomeko.net/online_tools/hex_to_base64.php?lang=en).
 
-CONFIGURACIÓN NANOGATEWAY
--------------------------------------------------------------------------------
-Para configurar el dispositivo LoPy que actuará como NanoGateway, solo hay que
-comentar/descomentar algunas líneas del archivo _config.py_. Las líneas
-corresponden a la configuración de ID Gateway, dirección del Network Server y
-puerto de entrada/salida del Netwoek Server, para los dos servidores utilizados:
- The Things Network y Loriot.
-Es importante mencionar que dado que el gateway hace uso de la conexión Wifi del
-dispositivo, una vez configurado ya no se estará accesible esta red y por lo
-tanto el servidor FTP tampoco. Para accerlo accesible de nuevo se ha de conectar
-el pin P12(G28) a 3V3 al durante los 1-3 primeros segundos del inicio del
-dispositivo, y luego retirar el puente hecho. Esta acción cargará la
-configuración del firmware base del dispositivo.
-
-USO SEVER FTP (Paso archivos a LoPy)
+INSTALL FIRMWARE
 --------------------------------------------------------------------------------
-Para pasar archivos a LoPy solo hay que conectarse a su punto WiFy propio y
-configurar un cliente FTP (e.g Filezilla) con las siguientes propiedades:  
-* Host : 192.168.4.1
-* User: micro
-* Password: python
-* Only use plain FTP (insecure)
-* Transfer Mode: Passive
-
-Si no aparece el punto WiFy se tiene que poner la placa en modo seguro llevando
-la entrada G28 a 3V3 (solo con expansion Board).
-
-INSTALAR SOFTWARE DE COMPILACIÓN
---------------------------------------------------------------------------------
-1.-  __Obtener pycom-micropython-sigfox__
+1.-  __Obtain pycom-micropython-sigfox__
 ~~~
 git clone https://github.com/pycom/pycom-micropython-sigfox.git
 cd pycom-micropython-sigfox
 git submodule update --init
 ~~~
-2.- __Instalar Toolchain__
+2.- __Install Toolchain__
 ~~~
 sudo easy_install pip
 sudo pip install pyserial
 ~~~
-Descargar:
+Download:
 https://dl.espressif.com/dl/xtensa-esp32-elf-osx-1.22.0-61-gab8375a-5.2.0.tar.gz
 ~~~
 mkdir -p ~/esp
 cd ~/esp
 tar -xzf ~/Downloads/xtensa-esp32-elf-osx-1.22.0-61-gab8375a-5.2.0.tar.gz
 ~~~
-3.- __Fijar Variables de Entorno__  
-Modificar el archivo .profile (dentro de la carpeta raíz ~) y añadir la
-siguiente línea:
+3.- __Set Enviroment Variables__  
+Modify .profile file (inside root folder ~) and add the following lines:
 ~~~
 export PATH=$PATH:$HOME/esp/xtensa-esp32-elf/bin
 export IDF_PATH=~/esp/pycom-esp-idf
 ~~~
-4.- __Obtener Espressif__
+4.- __Obtain Espressif__
 ~~~
 cd ~/esp
 git clone https://github.com/pycom/pycom-esp-idf.git
 cd ~/esp/esp-idf
 git submodule update --init
 ~~~
-5.- __Compilar mpy-cross__  
+5.- __Compile mpy-cross__  
 ~~~
 cd pycom-micropython-sigfox/mpy-cross
 make all

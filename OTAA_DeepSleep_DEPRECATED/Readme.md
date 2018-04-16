@@ -141,7 +141,7 @@ CONFIGURACIÓN NANOGATEWAY
 Para configurar el dispositivo LoPy que actuará como NanoGateway, solo hay que
 comentar/descomentar algunas líneas del archivo _config.py_. Las líneas
 corresponden a la configuración de ID Gateway, dirección del Network Server y
-puerto de entrada/salida del Netwoek Server, para los dos servidores utilizados:
+puerto de entrada/salida del Network Server, para los dos servidores utilizados:
  The Things Network y Loriot.
 Es importante mencionar que dado que el gateway hace uso de la conexión Wifi del
 dispositivo, una vez configurado ya no se estará accesible esta red y por lo

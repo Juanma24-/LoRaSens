@@ -39,7 +39,7 @@ class Node:
         # Disable blue blinking and turn LED off
         pycom.heartbeat(False)
         # Initialize LoRa in LORAWAN mode
-        self.lora = LoRa(mode = LoRa.LORAWAN)
+        self.lora = LoRa(mode = LoRa.LORAWAN,device_class=LoRa.CLASS_A,region=LoRa.EU868)
         # Set the 3 default channels to the same frequency (must be before sending the
         # OTAA join request)
         self.lora.add_channel(0, frequency=868100000, dr_min=0, dr_max=5)
