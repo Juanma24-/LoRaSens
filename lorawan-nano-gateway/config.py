@@ -16,11 +16,11 @@ PORT = 1700
 NTP = "pool.ntp.org"
 NTP_PERIOD_S = 3600
 
-WIFI_SSID = 'MiFibra-336E'
-WIFI_PASS = 'szCAnpy2'
+#WIFI_SSID = 'MiFibra-336E'
+#WIFI_PASS = 'szCAnpy2'
 
-#WIFI_SSID = 'MBP_JuanMa'
-#WIFI_PASS = 'MBP_JuanMa'
+WIFI_SSID = 'MBP_JuanMa'
+WIFI_PASS = 'MBP_JuanMa'
 
 # for EU868
 LORA_FREQUENCY = 868100000

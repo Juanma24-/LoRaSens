@@ -1,4 +1,4 @@
-Pysense Software
+LoPy Software
 ================================================================================
 This file is intended to explain the way the software for Pysense works.
 The library files and "_main.py" file should not be modified. Only "_boot.py"
@@ -7,12 +7,6 @@ enable UART for debugging purposes.
 
 __IMPORTANT__  
 To keep the device battery as much time as possible, deepsleep function is used.
-Using LoPy and Pysense, deepsleep can be accessed in two different ways: using
-the LoPy function and using the Pysense function.  
-
-It has been decided to used the Pysense function because using this hardware
-configuration is the option with the best performance. This [forum thread](https://forum.pycom.io/topic/1589/deep-sleep-summary/2)
-confirms it.
 
 __INIT TUTORIAL__
 * https://github.com/ttn-liv/devices/wiki/Getting-started-with-the-PyCom-LoPy  
@@ -24,7 +18,7 @@ The software executes a infinite loop with two parts. The first (almost all time
 the device is in deepsleep mode, saving power. When the device awakes, it
 measures the Pysense sensors and sends the data via LoRaWAN.
 
-This loop can only be broken when the Pysense button is pressed or if the OTA
+This loop can only be broken when the Expansion Board button is pressed or if the OTA
 procedure is called. If the button is pressed, the device enables Wi-Fi and
 Telnet and FTP servers and its filesystem can be modified remotely. If 4F is
 sent via Downlink message, the OTA procedure is enabled. The device connects to
@@ -36,7 +30,7 @@ Server via OTAA procedure. For testing, The Things Network Server has been used,
 however, with the correct gateway any Network Server (like for example Loriot)
 can be used.
 
-The device can also receive two kind of downlink messages, to chenge the
+The device can also receive two kind of downlink messages, to change the
 measurement interval and to change the data rate.
 * Changing the measurement interval
 	This message has not a minimum length of 2 bytes. The first byte corresponds to
@@ -53,6 +47,7 @@ measurement interval and to change the data rate.
 * OTA
 	To init the OTA procedure a 1 byte message with the ASCII code of 'O'
 	letter in hexadecimal format (0x4F) has to be sent.
+
 
 ### Firmware
 
@@ -139,7 +134,6 @@ bash libs.sh
 cd /pycom-micropython-sigfox/esp32/
 bash FullBuild.sh
 ~~~
-
 MQTT
 --------------------------------------------------------------------------------
 

@@ -1,6 +1,4 @@
-from machine import UART
+# _boot.py -- always run on boot-up, even during safe boot
 import os
-#-----------------------#
-#UART no activa
-uart = UART(0, 115200)
-os.dupterm(uart)
+from machine import UART
+os.dupterm(UART(0, 115200))

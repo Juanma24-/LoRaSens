@@ -3,34 +3,25 @@
 #UPC-ALSTOM 2017
 #------------------------------------------------------------------------------#
 from network import LoRa, WLAN
+import network
 import socket
 import binascii
 import pycom
 import time
 import machine
 from machine import Timer
-import machine
-#from OTA import WiFiOTA
+from OTA import WiFiOTA
 #------------------------------------------------------------------------------#
-#Librerias Pysense y sensores
-from pysense import Pysense
-from SI7006A20 import SI7006A20                                                 #Sensor Humedad y Temperatura
-from LTR329ALS01 import LTR329ALS01                                             #Sensor Luminosidad
-from MPL3115A2 import MPL3115A2,ALTITUDE,PRESSURE                               #Sensor Presión
-#------------------------------------------------------------------------------#
-
 #------------------------------------------------------------------------------#
 class Node:
-    def __init__(self,sleep_time,data_rate,pysense):
+    def __init__(self,sleep_time,data_rate):
         self.lora = None                                                        # Instancia de Lora (sin inicializar)
         self.s = None                                                           # Instancia Socket (sin inicializar)
         self.sleep_time = sleep_time                                            # Intervalo de inactividad
         self.dr = data_rate                                                     # Data Rate (defecto 5)
-        self.py = pysense                                                       # Instancia de Pysense
-        self.lt = LTR329ALS01(self.py)                                          # Instancia Sensor de Luminosidad
-        self.mp = MPL3115A2(self.py,mode=PRESSURE)                              # Instancia Sensor de Presión
-        self.si = SI7006A20(self.py)                                            # Instancia Sensor de Humedad y tempertura
-
+        self.adc = machine.ADC()                                                #ADC for battery measurement
+        self.adc.vref(1200)
+        self.batteryValue = self.adc.channel(pin='P16',attn=2)
 #------------------------------------------------------------------------------#
     def connect(self,dev_eui,app_eui, app_key):
         """
@@ -46,7 +37,7 @@ class Node:
         self.lora.add_channel(2, frequency=868100000, dr_min=0, dr_max=5)
         # Join a network using OTAA (Over the Air Activation)
         self.lora.join(activation = LoRa.OTAA, auth = (dev_eui,app_eui, app_key),
-                    timeout = 0, dr=self.dr)                                                #login for TheThingsNetwork see here:
+                    timeout = 0, dr=self.dr)                                    #login for TheThingsNetwork see here:
                                                                                 #https://www.thethingsnetwork.org/forum/t/lopy-otaa-example/4471
         # Wait until the module has joined the network
         while not self.lora.has_joined():
@@ -60,7 +51,7 @@ class Node:
         """
         Send data over the network.
         """
-        if machine.reset_cause() == machine.DEEPSLEEP_RESET:                           #Si despierta tras deepsleep
+        if machine.reset_cause() == machine.DEEPSLEEP_RESET:                    #Si despierta tras deepsleep
             # Initialize LoRa in LORAWAN mode
             self.lora = LoRa(mode = LoRa.LORAWAN,adr=True,device_class=LoRa.CLASS_A,region=LoRa.EU868)
             # restore the LoRaWAN connection state
@@ -87,8 +78,8 @@ class Node:
         try:
             self.s.send(data)                                                   #Envio de datos
             self.s.setblocking(False)                                           # make the socket non-blocking (necesario para no dejar colgado el dispositivo)
-            rx = bytes(self.s.recv(128))                                        # (because if there's no data received it will block forever...)
-            self.receive(rx=rx)
+                                                                                # (because if there's no data received it will block forever...)
+            self.receive(rx=bytes(self.s.recv(128)) )
             self.lora.nvram_save()
             print('Lora Config Saved!')
         except OSError as e:
@@ -114,70 +105,67 @@ class Node:
                 self.dr = int.from_bytes(rx[1:],'big')                          #Decodifica el valor del nuevo data Rate
                 pycom.nvs_set('data_rate',self.data_rate)                       #Lo guarda en NVRAM
             elif rx[0] == 79:
-                print("Performing OTA")
-                #ota.connect()
-                #ota.update()
-                pass
+                ota = WiFiOTA('MBP_JuanMa','MBP_JuanMa',"54.154.225.138",8000)  #Amazon Web Services Server
+                print("Updating via OTA...")
+                print('- ' * 20)
+                ota.connect()
+                ota.update()
             else:
                 pass
 #------------------------------------------------------------------------------#
 #Función de lectura de medidas. Los sensores ya han sido inicializados al
 #crear la instancia de la clase Node
     def readsens(self):
-        pressure = (int(self.mp.pressure())-90000).to_bytes(2,'little')                     #Segundo Elemento Lista: Presión (entero)
-        humidity = int(round(self.si.humidity(),2)*100).to_bytes(2,'little')                #Tercer Elemento Lista: Humedad (dos decimales)
-        temperature = int(round(self.si.temperature(),2)*100).to_bytes(2,'little')          #Cuarto Elemento Lista: Temperatura (dos decimales)
-        battery = int(round(self.py.read_battery_voltage(),4)*10000-33000).to_bytes(2,'little') #Quinto Elemento Lista: Voltaje (cuatro decimales)
-        light = int(self.lt.light()[0]).to_bytes(2,'little')                                #Primer Elemento Lista: Luminosidad (entero)
-        reading = light+pressure+humidity+temperature+battery                   #Union de tipos bytes
+
+        battery = self.batteryValue.voltage()/327.5
+        reading = bytes([0x00, 0x00, 0x00,0x00, 0x00, 0x00,0x00, 0x00])+int(round(battery,4)*10000-33000).to_bytes(2,'little')
         return reading
 #------------------------------------------------------------------------------#
 #Codigo principal
-                                                         #Desactiva el heartbeat
-app_eui = binascii.unhexlify('BE7A000000000906')                                #ID de la app. (Seleccionada por el usuario)
-dev_eui = binascii.unhexlify('70B3D5499CE967FB')
-app_key = binascii.unhexlify('EB204056B1A3024F6D29991AEE981FA6')                #Clave de la app para realizar el handshake. Única para cada dispositivo.
-ajuste = 3                                                                     #Numero de segundos para que el intervalo sea exacto en el Network Server
-                                                                                #TODO: REAL TIME
-py = Pysense()
+
+app_eui = binascii.unhexlify('70B3D57ED0009F73')                                #ID de la app. (Seleccionada por el usuario)
+dev_eui = binascii.unhexlify('70B3D5499CE967FB')                                #ID del dispositivo. (Seleccionada por el usuario)
+app_key = binascii.unhexlify('054BFCAC2632EB70D56F4BCBB8D95F02')                #Clave de la app para realizar el handshake. Única para cada dispositivo.
+ajuste = 3                                                                      #Numero de segundos para que el intervalo sea exacto en el Network Server
+
 #------------------------------------------------------------------------------#
 #Según el modo de inicio, se realizan unas serie de acciones u otras.
-if machine.reset_cause() == machine.DEEPSLEEP_RESET:                                   #Si despierta tras deepsleep
+if machine.reset_cause() == machine.DEEPSLEEP_RESET:                            #Si despierta tras deepsleep
     print('Woke from a deep sleep R:%d'%(machine.DEEPSLEEP_RESET))
 
     try:
         sleep_time = pycom.nvs_get('sleep_time')                                #Obtiene el valor de la variable sleep_time guardado en NVRAM
         data_rate = pycom.nvs_get('data_rate')
-    except Exception:                                                                   #No se consigue obtener el valor (ERROR INFO: https://forum.pycom.io/topic/1869/efficiency-of-flash-vs-nvram-and-some-nvs-questions/3)
+    except Exception:                                                           #No se consigue obtener el valor (ERROR INFO: https://forum.pycom.io/topic/1869/efficiency-of-flash-vs-nvram-and-some-nvs-questions/3)
         print("Error: Sleep Time / Data Rate could not be recovered. Setting default value")
-        sleep_time = 300                                                        #Se le da el valor por defecto
+        sleep_time = 60                                                         #Se le da el valor por defecto
         data_rate = 5
         pycom.nvs_set('sleep_time', sleep_time)                                 #Guarda el valor por defecto de sleep_time en NVRAM
         pycom.nvs_set('data_rate', data_rate)
     print("SleepTime & Data Rate recovered")
 
     try:
-        n = Node(sleep_time,data_rate,py)                                       #Crea una instancia de Node
+        n = Node(sleep_time,data_rate)                                          #Crea una instancia de Node
         print("Node Instance created sucesfully")
     except Exception:
         print("Node Instance could not be cretaed. Sleeping...")
         print('- ' * 20)
-        n.py.setup_sleep(sleep_time-ajuste)
-        n.py.go_to_sleep()                                                      #Dispositivo enviado a Deepsleep
+        machine.deepsleep((sleep_time-ajuste)*1000)                             #Dispositivo enviado a Deepsleep
 
-    lecturas = n.readsens()
     print("Sending Data")
-    n.send(lecturas)                                                            #Envío de las lecturas
+    n.send(n.readsens())                                                        #Envío de las lecturas
     print("Data Sent, sleeping ...")
     print('- ' * 20)
-    machine.deepsleep((300-ajuste)*1000)                                        #Dispositivo enviado a Deepsleep
+    machine.deepsleep((sleep_time-ajuste)*1000)                                 #Dispositivo enviado a Deepsleep
 
 elif (machine.wake_reason() == machine.PIN_WAKE):
     uart = UART(0, 115200)                                                      #Se activa la UART
     os.dupterm(uart)
     wlan = WLAN()
-    wlan.init(mode=WLAN.AP, ssid='lopy-pysense', auth=(WLAN.WPA2,'lopy-pysense'), channel=7,antenna=WLAN.INT_ANT) #Inicia el servidor FTP
-
+    wlan.init(mode=WLAN.AP, ssid='lopy-pysense',
+                auth=(WLAN.WPA2,'lopy-pysense'),
+                 channel=7,antenna=WLAN.INT_ANT)                                #Inicia Wi-Fi
+    server = network.Server()                                                   #Init FTP Server
     print("Device entered into debugging mode")
     print("Please do not connect to battery")
     pycom.heartbeat(True)                                                       #Se activa el Heartbeat
@@ -189,9 +177,9 @@ elif (machine.wake_reason() == machine.PIN_WAKE):
 
 else:                                                                           #Si viene de Boot o Hard Reset
     print('Power on or hard reset')
-    sleep_time = 300                                                            #Valor por defecto de sleep_time (Minimo segun Fair Acess Policy TTN)
+    sleep_time = 60                                                             #Valor por defecto de sleep_time (Minimo segun Fair Acess Policy TTN)
     data_rate = 5
-    pycom.wifi_on_boot(False)                                                   # disable WiFi on boot TODO: Intentar en versiones posteriores, da un Core Error.
+    pycom.wifi_on_boot(False)                                                   #Disable WiFi on boot
     pycom.heartbeat_on_boot(False)
     try:
         pycom.nvs_set('sleep_time', sleep_time)                                 #Guarda el valor por defecto de sleep_time en NVRAM
@@ -200,13 +188,10 @@ else:                                                                           
         print("Error: Value could not be stored")
         pass
 
-    n = Node(sleep_time,data_rate,py)                                           #Crea una instancia de Node
-    n.connect(dev_eui,app_eui, app_key)                                                 #Join LoRaWAN with OTAA
-    #ota = WiFiOTA(WIFI_SSID,WIFI_PW,
-    #          SERVER_IP,  # Update server address
-    #          8000)  # Update server port
-	#Envío de las lecturas
+    n = Node(sleep_time,data_rate)                                              #Crea una instancia de Node
+    n.connect(dev_eui,app_eui, app_key)                                         #Join LoRaWAN with OTAA
+
     n.send(n.readsens())
     print("Data Sent, sleeping ...")
     print('- ' * 20)
-    machine.deepsleep((300-ajuste)*1000)                                        #Dispositivo enviado a Deepsleep
+    machine.deepsleep((sleep_time-ajuste)*1000)                                 #Dispositivo enviado a Deepsleep
